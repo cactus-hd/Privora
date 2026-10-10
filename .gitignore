@@ -1,0 +1,7 @@
+/target
+**/target
+*.vora
+*.license.txt
+*.tmp
+.DS_Store
+Thumbs.db

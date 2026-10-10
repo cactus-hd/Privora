@@ -1,0 +1,28 @@
+[workspace]
+resolver = "3"
+members = ["crates/privora-core", "apps/privora-desktop"]
+default-members = ["apps/privora-desktop", "crates/privora-core"]
+
+[workspace.package]
+version = "0.2.0"
+edition = "2024"
+license = "MIT"
+authors = ["Privora Project"]
+
+[workspace.dependencies]
+aes-gcm = "=0.11.1"
+argon2 = "=0.5.3"
+chrono = { version = "=0.4.42", features = ["serde"] }
+data-encoding = "=2.9.0"
+getrandom = "=0.3.4"
+dirs = "=6.0.0"
+eframe = { package = "eframe", version = "=0.36.2", default-features = false, features = ["default_fonts", "glow", "wayland", "x11"] }
+hex = "=0.4.3"
+hkdf = "=0.12.4"
+sha2 = "=0.10.9"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tempfile = "=3.23.0"
+thiserror = "=2.0.21"
+uuid = { version = "=1.18.1", features = ["v4", "serde"] }
+zip = { version = "=8.6.0", default-features = false, features = ["deflate", "time"] }

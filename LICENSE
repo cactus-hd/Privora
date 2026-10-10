@@ -1,0 +1,135 @@
+PRIVORA PERSONAL LEARNING AND NON-COMMERCIAL LICENSE (PLNC) v1.0
+
+Copyright (c) 2026 cactus-hd / Privora Project. All rights reserved.
+
+IMPORTANT: This is a custom, source-available license. It is not an OSI-approved
+Open Source license. It is a drafting template and has not been reviewed by a
+lawyer. The rights below apply only to code and materials owned by the Privora
+copyright holder; third-party components remain subject to their own licenses.
+
+1. DEFINITIONS
+
+"Software" means the Privora source code, application binaries, documentation,
+configuration, and project materials that are owned by the Privora copyright
+holder and distributed with this license.
+
+"You" means the individual person exercising the permissions below. A company,
+partnership, school, nonprofit, government body, or other organization is not a
+"personal" user under this license.
+
+"Commercial Use" means use that is intended for or contributes to commercial,
+professional, operational, revenue-generating, or business activity, whether or
+not the Software itself is sold. Examples include use by or for a business,
+use in a paid product or service, use to serve customers or clients, use as part
+of paid work, and internal deployment to support an organization's operations.
+
+"Redistribution" means publishing, distributing, sublicensing, selling, renting,
+sharing, hosting, mirroring, repackaging, or otherwise making the Software or a
+modified or derivative version available to other people, whether for payment
+or free of charge. This definition is subject to the GitHub platform note in
+Section 5 below.
+
+2. LIMITED PERMISSION
+
+Provided that You comply with every term of this license, the copyright holder
+grants You a limited, non-exclusive, non-transferable, non-sublicensable license
+to:
+
+(a) download and keep a copy of the Software for Your own private use;
+
+(b) install, run, inspect, read, compile, and test the Software solely for Your
+    own personal, educational, research, evaluation, or learning purposes that
+    are strictly non-commercial;
+
+(c) make private modifications to the source code solely for the permitted
+    non-commercial purposes above; and
+
+(d) make reasonable private backup copies for those same purposes.
+
+This permission does not transfer ownership of the Software or any intellectual
+property rights to You. All rights not expressly granted are reserved.
+
+3. RESTRICTIONS
+
+You must NOT, without prior written permission from the copyright holder:
+
+(a) use the Software for Commercial Use, directly or indirectly;
+
+(b) use, deploy, or provide the Software on behalf of a business or other
+    organization, including for internal operational use or paid client work;
+
+(c) Redistribute the source code, binaries, installers, packages, or any
+    modified or derivative version outside the limited GitHub platform rights
+    described in Section 5;
+
+(d) publish or host modified source, mirrors, downloadable releases, packages,
+    container images, or third-party distribution channels containing the
+    Software or a derivative version;
+
+(e) sell, rent, lease, sublicense, or provide the Software as a service, or
+    incorporate it into a product or service offered to third parties;
+
+(f) remove, obscure, or alter copyright, license, or attribution notices; or
+
+(g) claim that the Software is yours, or use Privora's name, logo, or branding
+    in a way that suggests endorsement or official affiliation.
+
+You may study the code and maintain private learning modifications. This does
+not authorize publishing those modifications, redistributing code snippets as
+substitute copies of project files, or using the Software in a business.
+
+4. USER CONTENT AND THIRD-PARTY COMPONENTS
+
+This license does not claim ownership of documents, images, audio, video, or
+other content that You create, own, or process using the Software. Such content
+remains subject to the rights and obligations applicable to that content.
+
+The Software may depend on third-party open-source components. Those components
+are not relicensed by this document; their respective license terms continue to
+apply to those components. This license governs only the Privora materials
+owned by the copyright holder.
+
+5. PUBLIC GITHUB REPOSITORIES
+
+When the repository is public, GitHub's Terms of Service govern access to the
+GitHub service and grant platform users certain rights to view and fork public
+repositories through GitHub. This license does not override those independent
+platform terms, nor does a GitHub-hosted fork grant permission for Commercial
+Use or external Redistribution under this license.
+
+The copyright holder cannot use this license to make a public repository
+technically private or to prevent GitHub's platform from exposing its supported
+viewing and forking functionality. If source access and forks must be restricted,
+the repository should be private. Existing third-party forks and local copies
+may remain after a repository is made private.
+
+6. TERMINATION
+
+The permissions in this license terminate automatically if You materially
+violate its terms. Upon termination, You must stop using the Software and
+remove copies under Your control, except where retention is required by law.
+The copyright holder may reinstate permission in writing.
+
+7. NO WARRANTY
+
+THE SOFTWARE IS PROVIDED "AS IS" AND "AS AVAILABLE", WITHOUT WARRANTIES OR
+CONDITIONS OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE, AND NON-INFRINGEMENT,
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW.
+
+8. LIMITATION OF LIABILITY
+
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, THE COPYRIGHT HOLDER AND
+CONTRIBUTORS SHALL NOT BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY,
+WHETHER IN CONTRACT, TORT, OR OTHERWISE, ARISING FROM, OUT OF, OR IN CONNECTION
+WITH THE SOFTWARE OR ITS USE, INCLUDING DATA LOSS, UNAUTHORIZED ACCESS, OR
+SECURITY FAILURE.
+
+9. ADDITIONAL PERMISSION
+
+Any exception to these restrictions, including commercial use, publication,
+redistribution, or use in a business, must be granted in a separate written
+permission by the copyright holder. Silence, public availability, or visibility
+on GitHub does not grant additional rights.
+
+END OF LICENSE
