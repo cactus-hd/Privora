@@ -78,7 +78,6 @@ pub struct Manifest {
     pub nonce_prefix_hex: String,
     pub plaintext_len: u64,
     pub chunk_size: u32,
-    /// Public count only; individual file names and types stay inside the encrypted ZIP payload.
     pub file_count: usize,
     pub total_file_bytes: u64,
 }
