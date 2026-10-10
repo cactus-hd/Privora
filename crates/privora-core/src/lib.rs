@@ -70,7 +70,7 @@ pub struct Manifest {
     pub package_id: String,
     pub name: String,
     pub created_at: String,
-    /// Inclusive local calendar date, formatted YYYY-MM-DD. `None` means no expiry.
+  
     pub expires_on: Option<String>,
     /// Maximum successful unlocks recorded by this local installation.
     pub max_activations: u32,
