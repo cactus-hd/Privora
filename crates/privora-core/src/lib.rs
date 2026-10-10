@@ -93,7 +93,6 @@ pub struct CreatedPackage {
 pub struct PackageInfo {
     pub format_version: u32,
     pub fingerprint: String,
-    /// True for v2 packages: all manifest fields are encrypted.
     pub metadata_encrypted: bool,
 }
 
