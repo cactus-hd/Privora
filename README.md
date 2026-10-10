@@ -348,6 +348,12 @@ If you need to prevent the public from viewing or forking the source, keep the r
 
 ---
 
+## ⭐ Support the project
+
+If Privora helps you with your works, starring the repository is a simple way to support the project ⭐ .
+
+---
+
 <div align="center">
 
 **PRIVORA** · Create · Encrypt · License · Share
