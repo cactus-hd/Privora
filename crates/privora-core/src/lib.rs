@@ -86,7 +86,6 @@ pub struct Manifest {
 pub struct CreatedPackage {
     pub manifest: Manifest,
     pub access_code: String,
-    /// Stable local counter key derived from the public encrypted header.
     pub fingerprint: String,
 }
 
