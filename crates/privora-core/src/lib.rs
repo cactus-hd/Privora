@@ -70,9 +70,7 @@ pub struct Manifest {
     pub package_id: String,
     pub name: String,
     pub created_at: String,
-  
     pub expires_on: Option<String>,
-    /// Maximum successful unlocks recorded by this local installation.
     pub max_activations: u32,
     pub kdf: String,
     pub cipher: String,
