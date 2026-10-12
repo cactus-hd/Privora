@@ -36,7 +36,7 @@
 - [Roadmap](#roadmap)
 - [Contributing and feedback](#contributing-and-feedback)
 - [License](#license)
-- [supporting me](#-⭐-Support-the-project)
+- [supporting me](#Support-the-project)
 
 ## What is Privora?
 
@@ -348,7 +348,7 @@ Privora is **source-available, not OSI-approved open-source software**. The cust
 If you need to prevent the public from viewing or forking the source, keep the repository private. GitHub's own Terms of Service govern public repository viewing and platform-hosted forks; a custom license cannot turn a public repository into a private one.
 
 ---
-## ⭐ Support the project
+## Support the project
 
 If Privora helps you with your works or it was helpful for learning , starring the repository is a simple way to support the project ⭐ .
 ---
