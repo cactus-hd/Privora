@@ -349,7 +349,7 @@ If you need to prevent the public from viewing or forking the source, keep the r
 ---
 ## ⭐ Support the project
 
-If Nura helps you learn, prototype or build something , starring the repository is a simple way to support the project ⭐ .
+If Privora helps you with your works or it was helpful for learning , starring the repository is a simple way to support the project ⭐ .
 ---
 <div align="center">
 
