@@ -347,7 +347,10 @@ Privora is **source-available, not OSI-approved open-source software**. The cust
 If you need to prevent the public from viewing or forking the source, keep the repository private. GitHub's own Terms of Service govern public repository viewing and platform-hosted forks; a custom license cannot turn a public repository into a private one.
 
 ---
+## ⭐ Support the project
 
+If Nura helps you learn, prototype or build something , starring the repository is a simple way to support the project ⭐ .
+---
 <div align="center">
 
 **PRIVORA** · Create · Encrypt · License · Share
