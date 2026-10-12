@@ -36,6 +36,7 @@
 - [Roadmap](#roadmap)
 - [Contributing and feedback](#contributing-and-feedback)
 - [License](#license)
+- [supporting me](#-⭐-Support-the-project)
 
 ## What is Privora?
 
