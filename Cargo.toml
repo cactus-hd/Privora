@@ -4,7 +4,7 @@ members = ["crates/privora-core", "apps/privora-desktop"]
 default-members = ["apps/privora-desktop", "crates/privora-core"]
 
 [workspace.package]
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
 license = "MIT"
 authors = ["Privora Project"]
@@ -26,3 +26,8 @@ tempfile = "=3.23.0"
 thiserror = "=2.0.21"
 uuid = { version = "=1.18.1", features = ["v4", "serde"] }
 zip = { version = "=8.6.0", default-features = false, features = ["deflate", "time"] }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true

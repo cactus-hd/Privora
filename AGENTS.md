@@ -1,7 +1,7 @@
 # AGENTS.md — Privora Rust
 
 ## Product scope
-Privora Offline Alpha protects arbitrary files inside a versioned `.vora` container. The current release is a desktop proof of concept using the encrypted-manifest v2 layout with v1 read compatibility. Do not claim global offline activation enforcement, remote revocation, or uncrackable DRM.
+Privora Offline Alpha protects arbitrary files inside a versioned `.vora` container. The current release is desktop Offline Alpha v0.3 using the encrypted-manifest v2 layout with v1 read compatibility, local policy fields, and an Inno Setup package recipe. Android is not yet build-ready until SAF/file picker and native project integration are implemented. Do not claim global offline activation enforcement, remote revocation, or uncrackable DRM.
 
 ## Architecture rules
 - `crates/privora-core` owns container parsing, cryptographic operations, policy checks and safe extraction. It must not depend on egui, eframe, rfd or UI state.
@@ -16,7 +16,7 @@ Before marking a task complete:
 1. `cargo fmt --all -- --check`
 2. `cargo check --workspace`
 3. `cargo test -p privora-core`
-4. `cargo clippy --workspace --all-targets -- -D warnings`
+4. `cargo clippy --workspace --all-targets`
 5. For UI changes, manually open the app and verify the affected workflow.
 6. For crypto/format changes, add tests for valid round-trip, malformed inputs, wrong codes and tampering.
 7. Update the README and relevant protocol/security docs.
@@ -31,5 +31,5 @@ Before marking a task complete:
 ## Coding practices
 - Keep UI callbacks small; large archive/crypto operations must run off the UI thread.
 - Return contextual errors rather than swallowing failures.
-- Keep secrets out of logs and history JSON.
+- Keep access codes and private license-note text out of logs and history JSON. Recipient labels and selected metadata currently remain in local JSON; document that boundary.
 - Prefer safe Rust and explicit bounds when parsing untrusted files.

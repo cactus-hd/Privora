@@ -13,7 +13,7 @@ This is a versioned implementation specification, not a finalized or independent
 | 40 | Encrypted manifest | AES-256-GCM ciphertext plus tag; maximum plaintext manifest is 4 MiB |
 | after encrypted manifest | Encrypted archive | Concatenated AES-256-GCM chunks, each followed by its 16-byte tag |
 
-All manifest fields are inside the encrypted manifest in v2: package ID and name, creation time, expiry, local activation limit, file count and total bytes, archive length, chunk size, payload nonce prefix and human-readable crypto labels. The package's external filesystem name and approximate total file size are not hidden by container encryption. The fixed magic, random salt, random manifest nonce and encrypted-manifest length are public by design.
+All manifest fields are inside the encrypted manifest in v2: package ID and name, creation time, start/expiry dates, recipient label, issuer note, local activation limit, file count and total bytes, archive length, chunk size, payload nonce prefix and human-readable crypto labels. The package's external filesystem name and approximate total file size are not hidden by container encryption. The fixed magic, random salt, random manifest nonce and encrypted-manifest length are public by design.
 
 The length and fixed KDF are part of the format contract. Knowing the algorithm name is not a cryptographic secret and does not meaningfully weaken a randomly generated 256-bit access secret; manifest encryption is primarily for metadata confidentiality, not algorithm obscurity.
 

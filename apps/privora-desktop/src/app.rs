@@ -2,8 +2,8 @@ use crate::state::{LocalState, state_file_path};
 use chrono::{Local, NaiveDate};
 use eframe::egui::{self, Align, Color32, FontId, Layout, RichText, Stroke, Vec2};
 use privora_core::{
-    CreatedPackage, Manifest, PackageInfo, UnlockedPackage, create_package, inspect_package,
-    unlock_package,
+    CreatedPackage, LicensePolicy, Manifest, PackageInfo, UnlockedPackage,
+    create_package_with_policy, inspect_package, unlock_package,
 };
 use std::{
     fs,
@@ -47,9 +47,14 @@ pub struct PrivoraApp {
     state: LocalState,
     selected_files: Vec<PathBuf>,
     package_name: String,
+    valid_from_enabled: bool,
+    valid_from_date: String,
     expiry_enabled: bool,
     expiry_date: String,
     max_activations: String,
+    recipient_label: String,
+    license_note: String,
+    license_search: String,
     create_rx: Option<Receiver<Result<CreatedUi, String>>>,
     unlock_rx: Option<Receiver<Result<UnlockedUi, String>>>,
     busy: bool,
@@ -93,11 +98,16 @@ impl PrivoraApp {
             state,
             selected_files: Vec::new(),
             package_name: "Private Package".into(),
+            valid_from_enabled: false,
+            valid_from_date: Local::now().date_naive().format("%Y-%m-%d").to_string(),
             expiry_enabled: false,
             expiry_date: (Local::now().date_naive() + chrono::Duration::days(30))
                 .format("%Y-%m-%d")
                 .to_string(),
             max_activations: "3".into(),
+            recipient_label: String::new(),
+            license_note: String::new(),
+            license_search: String::new(),
             create_rx: None,
             unlock_rx: None,
             busy: false,
@@ -236,7 +246,7 @@ impl PrivoraApp {
                 });
             ui.add_space(12.0);
             ui.label(
-                RichText::new("PRIVORA  •  ALPHA 0.2")
+                RichText::new("PRIVORA  •  ALPHA 0.3")
                     .size(12.5)
                     .color(MUTED),
             );
@@ -245,97 +255,126 @@ impl PrivoraApp {
     }
 
     fn draw_home(&mut self, ui: &mut egui::Ui) {
-        ui.add_space(6.0);
-        ui.label(RichText::new("Good to see you").size(14.0).color(MUTED));
-        ui.heading(
-            RichText::new("Share what should stay yours.")
-                .size(31.0)
-                .strong()
-                .color(TEXT),
+        page_header(
+            ui,
+            "Your private workspace",
+            "A calmer way to package and share files with access rules.",
         );
-        ui.label(
-            RichText::new(
-                "Protect documents, photos, audio and video in a single encrypted .vora file.",
-            )
-            .size(14.0)
-            .color(MUTED),
-        );
-        ui.add_space(18.0);
 
-        egui::Frame::new().fill(Color32::from_rgb(19, 21, 45)).stroke(Stroke::new(1.0, Color32::from_rgb(83, 53, 123)))
-            .corner_radius(egui::CornerRadius::same(16)).inner_margin(24).show(ui, |ui| {
+        egui::Frame::new()
+            .fill(Color32::from_rgb(20, 17, 42))
+            .stroke(Stroke::new(1.0, Color32::from_rgb(82, 57, 125)))
+            .corner_radius(egui::CornerRadius::same(16))
+            .inner_margin(egui::Margin::symmetric(23, 21))
+            .show(ui, |ui| {
                 ui.columns(2, |cols| {
                     cols[0].vertical(|ui| {
-                        ui.label(RichText::new("YOUR FILES. YOUR RULES.").size(11.5).strong().color(PURPLE_LIGHT));
+                        ui.label(RichText::new("PRIVATE BY DESIGN").size(11.5).strong().color(PURPLE_LIGHT));
+                        ui.add_space(7.0);
+                        ui.heading(RichText::new("Share what should stay yours.").size(30.0).strong().color(TEXT));
                         ui.add_space(8.0);
-                        ui.heading(RichText::new("Encrypt. License. Share.").size(25.0).strong().color(TEXT));
-                        ui.add_space(8.0);
-                        ui.label(RichText::new("Choose your files, set access rules, then send the .vora file and access code separately.").size(14.0).color(MUTED));
+                        ui.label(RichText::new("Bundle documents, images, audio and video into one encrypted .vora package. Keep the access code separate.").size(14.0).color(MUTED));
                         ui.add_space(15.0);
-                        if primary_button(ui, "Create New Package").clicked() { self.page = Page::Create; }
+                        if primary_button(ui, "Create a protected package  →").clicked() {
+                            self.page = Page::Create;
+                        }
+                        ui.add_space(8.0);
+                        ui.label(RichText::new("No account. No cloud upload. Files stay on this device while packaging.").size(12.0).color(MUTED));
                     });
                     cols[1].vertical_centered(|ui| {
-                        ui.add_space(6.0);
-                        icon_widget(ui, AppIcon::Package, 56.0, PURPLE_LIGHT);
+                        ui.add_space(8.0);
+                        egui::Frame::new()
+                            .fill(Color32::from_rgb(31, 20, 61))
+                            .stroke(Stroke::new(1.0, Color32::from_rgb(98, 64, 149)))
+                            .corner_radius(egui::CornerRadius::same(22))
+                            .inner_margin(egui::Margin::same(24))
+                            .show(ui, |ui| {
+                                icon_widget(ui, AppIcon::Package, 62.0, PURPLE_LIGHT);
+                                ui.add_space(5.0);
+                                icon_widget(ui, AppIcon::Shield, 25.0, GREEN);
+                            });
+                        ui.add_space(8.0);
                         ui.label(RichText::new("AES-256-GCM").size(16.0).strong().color(TEXT));
-                        ui.label(RichText::new("Argon2id key derivation").size(13.0).color(MUTED));
-                        ui.label(RichText::new("Chunked authenticated encryption").size(13.0).color(MUTED));
+                        ui.label(RichText::new("Authenticated encryption · Encrypted manifest").size(12.5).color(MUTED));
                     });
                 });
             });
-        ui.add_space(18.0);
-        ui.columns(3, |cols| {
-            stat_card(
-                &mut cols[0],
-                "PACKAGES CREATED",
-                self.state.packages.len().to_string(),
-                "Saved in local history",
-            );
-            stat_card(
-                &mut cols[1],
-                "SUCCESSFUL UNLOCKS",
-                self.state
-                    .activation_counts
-                    .values()
-                    .map(|v| *v as usize)
-                    .sum::<usize>()
-                    .to_string(),
-                "This installation only",
-            );
-            stat_card(
-                &mut cols[2],
-                "RECENTLY UNLOCKED",
-                self.state.unlocked.len().to_string(),
-                "No cloud sync",
-            );
+
+        ui.add_space(16.0);
+        ui.columns(2, |cols| {
+            egui::Frame::new()
+                .fill(Color32::from_rgb(19, 23, 45))
+                .stroke(Stroke::new(1.0, Color32::from_rgb(67, 57, 102)))
+                .corner_radius(egui::CornerRadius::same(13))
+                .inner_margin(egui::Margin::symmetric(18, 16))
+                .show(&mut cols[0], |ui| {
+                    ui.horizontal(|ui| {
+                        icon_widget(ui, AppIcon::Package, 37.0, PURPLE_LIGHT);
+                        ui.vertical(|ui| {
+                            ui.label(RichText::new("Protected packages").size(13.0).strong().color(TEXT));
+                            ui.label(RichText::new(self.state.packages.len().to_string()).size(34.0).strong().color(TEXT));
+                            ui.label(RichText::new("Created on this device").size(12.0).color(MUTED));
+                        });
+                    });
+                    ui.add_space(7.0);
+                    ui.label(RichText::new("Your package catalogue is stored locally. No account or cloud history is used.").size(12.5).color(MUTED));
+                });
+            cols[1].vertical(|ui| {
+                stat_card(
+                    ui,
+                    "SUCCESSFUL UNLOCKS",
+                    self.state.activation_counts.values().map(|v| *v as usize).sum::<usize>().to_string(),
+                    "Counted in this local profile",
+                );
+                ui.add_space(8.0);
+                stat_card(
+                    ui,
+                    "RECENT ACTIVITY",
+                    self.state.unlocked.len().to_string(),
+                    "Recent extraction records",
+                );
+            });
         });
-        ui.add_space(20.0);
+
+        ui.add_space(22.0);
         ui.horizontal(|ui| {
             ui.heading(
-                RichText::new("Recent Packages")
-                    .size(19.0)
+                RichText::new("Recent packages")
+                    .size(20.0)
                     .strong()
                     .color(TEXT),
             );
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 if ui
-                    .link(RichText::new("View all >").color(PURPLE_LIGHT))
+                    .link(RichText::new("View all  →").color(PURPLE_LIGHT))
                     .clicked()
                 {
                     self.page = Page::Licenses;
                 }
             });
         });
-        ui.add_space(8.0);
+        ui.add_space(9.0);
         if self.state.packages.is_empty() {
-            empty_panel(
-                ui,
-                "No packages yet",
-                "Your encrypted packages will appear here after you create the first one.",
-            );
+            egui::Frame::new()
+                .fill(PANEL)
+                .stroke(Stroke::new(1.0, BORDER))
+                .corner_radius(egui::CornerRadius::same(12))
+                .inner_margin(egui::Margin::symmetric(20, 22))
+                .show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        icon_widget(ui, AppIcon::Package, 33.0, PURPLE_LIGHT);
+                        ui.vertical(|ui| {
+                            ui.label(RichText::new("Your first package starts here").strong().color(TEXT));
+                            ui.label(RichText::new("Select files, define a validity window, then create a .vora package.").color(MUTED));
+                        });
+                        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                            if primary_button(ui, "Create package").clicked() { self.page = Page::Create; }
+                        });
+                    });
+                });
         } else {
             egui::ScrollArea::vertical()
-                .max_height(250.0)
+                .max_height(265.0)
                 .show(ui, |ui| {
                     let records = self
                         .state
@@ -349,6 +388,19 @@ impl PrivoraApp {
                     }
                 });
         }
+        ui.add_space(14.0);
+        egui::Frame::new()
+            .fill(Color32::from_rgb(15, 23, 39))
+            .stroke(Stroke::new(1.0, BORDER))
+            .corner_radius(egui::CornerRadius::same(10))
+            .inner_margin(12)
+            .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    icon_widget(ui, AppIcon::Shield, 20.0, GREEN);
+                    ui.label(RichText::new("Privacy note").strong().color(TEXT));
+                    ui.label(RichText::new("The package protects stored bytes; after a recipient extracts them, their later use cannot be controlled by this offline app.").size(12.5).color(MUTED));
+                });
+            });
     }
 
     fn draw_create(&mut self, ui: &mut egui::Ui) {
@@ -417,12 +469,30 @@ impl PrivoraApp {
                         .as_deref()
                         .unwrap_or("Never");
                     let note = format!(
-                        "PRIVORA OFFLINE LICENSE NOTE — V2\n\nPackage: {}\nPackage ID: {}\nLicense code: {}\nExpires: {}\nActivation limit (local installation only): {}\n\nKeep this code separate from the .vora package. Anyone who has both the package and code can decrypt the content.\nThis offline alpha cannot enforce a global person/device count across different computers.\n",
+                        "PRIVORA OFFLINE LICENSE NOTE — V3\n\nPackage: {}\nPackage ID: {}\nLicense code: {}\nRecipient label: {}\nValid from: {}\nExpires: {}\nLocal unlock limit: {}\nLicense note: {}\n\nKeep this code separate from the .vora package. Anyone who has both the package and code can decrypt the content.\nThe unlock counter is local to one app profile and is not a global person/device count.\n",
                         created.created.manifest.name,
                         created.created.manifest.package_id,
                         created.created.access_code,
+                        created
+                            .created
+                            .manifest
+                            .recipient_label
+                            .as_deref()
+                            .unwrap_or("Not specified"),
+                        created
+                            .created
+                            .manifest
+                            .valid_from
+                            .as_deref()
+                            .unwrap_or("Immediately"),
                         expiry_text,
                         created.created.manifest.max_activations,
+                        created
+                            .created
+                            .manifest
+                            .license_note
+                            .as_deref()
+                            .unwrap_or("None"),
                     );
                     match fs::write(&license_path, note) {
                         Ok(()) => {
@@ -515,14 +585,29 @@ impl PrivoraApp {
                     ui.label(RichText::new("Package name").size(13.0).color(MUTED));
                     ui.add_sized([ui.available_width(), 35.0], egui::TextEdit::singleline(&mut self.package_name).hint_text("e.g. Design Course"));
                     ui.add_space(12.0);
-                    ui.label(RichText::new("Maximum unlocks on this installation").size(13.0).color(MUTED));
-                    ui.add_sized([ui.available_width(), 35.0], egui::TextEdit::singleline(&mut self.max_activations).hint_text("3"));
-                    ui.add_space(9.0);
+                    ui.label(RichText::new("Recipient label (optional)").size(13.5).strong().color(TEXT));
+                    ui.add_sized([ui.available_width(), 37.0], egui::TextEdit::singleline(&mut self.recipient_label).hint_text("e.g. Design team / Amir"));
+                    ui.label(RichText::new("A private label for your own reference; it does not verify a person's identity.").size(11.5).color(MUTED));
+                    ui.add_space(10.0);
+                    ui.label(RichText::new("License note (optional)").size(13.5).strong().color(TEXT));
+                    ui.add_sized([ui.available_width(), 70.0], egui::TextEdit::multiline(&mut self.license_note).desired_rows(3).hint_text("Purpose, internal reference, or handling instructions"));
+                    ui.label(RichText::new("Up to 2,048 bytes. This note is encrypted inside the package.").size(11.5).color(MUTED));
+                    ui.add_space(10.0);
+                    ui.label(RichText::new("Validity window").size(13.5).strong().color(TEXT));
+                    ui.checkbox(&mut self.valid_from_enabled, "Do not allow access before a date");
+                    if self.valid_from_enabled {
+                        ui.add_sized([ui.available_width(), 35.0], egui::TextEdit::singleline(&mut self.valid_from_date).hint_text("YYYY-MM-DD"));
+                        ui.label(RichText::new("Access starts at the beginning of this local calendar date.").size(11.5).color(MUTED));
+                    }
+                    ui.add_space(6.0);
                     ui.checkbox(&mut self.expiry_enabled, "Set an expiration date");
                     if self.expiry_enabled {
                         ui.add_sized([ui.available_width(), 35.0], egui::TextEdit::singleline(&mut self.expiry_date).hint_text("YYYY-MM-DD"));
-                        ui.label(RichText::new("Format: YYYY-MM-DD. The package remains valid through this date.").size(11.5).color(MUTED));
+                        ui.label(RichText::new("The package remains valid through this local calendar date.").size(11.5).color(MUTED));
                     }
+                    ui.add_space(10.0);
+                    ui.label(RichText::new("Maximum successful unlocks on this installation").size(13.0).strong().color(TEXT));
+                    ui.add_sized([ui.available_width(), 35.0], egui::TextEdit::singleline(&mut self.max_activations).hint_text("3"));
                     ui.add_space(12.0);
                     egui::Frame::new().fill(Color32::from_rgb(38, 28, 51)).corner_radius(egui::CornerRadius::same(8)).inner_margin(10).show(ui, |ui| {
                         ui.label(RichText::new("Offline limitation").size(13.0).strong().color(PURPLE_LIGHT));
@@ -556,6 +641,20 @@ impl PrivoraApp {
                 return;
             }
         };
+        let valid_from = if self.valid_from_enabled {
+            match NaiveDate::parse_from_str(self.valid_from_date.trim(), "%Y-%m-%d") {
+                Ok(date) => Some(date),
+                Err(_) => {
+                    self.status = Some((
+                        false,
+                        "Start date must use YYYY-MM-DD (for example 2027-01-31).".into(),
+                    ));
+                    return;
+                }
+            }
+        } else {
+            None
+        };
         let expiry = if self.expiry_enabled {
             match NaiveDate::parse_from_str(self.expiry_date.trim(), "%Y-%m-%d") {
                 Ok(date) if date >= Local::now().date_naive() => Some(date),
@@ -574,6 +673,23 @@ impl PrivoraApp {
         } else {
             None
         };
+        if let (Some(start), Some(end)) = (valid_from, expiry) {
+            if start > end {
+                self.status = Some((
+                    false,
+                    "The start date must be on or before the expiration date.".into(),
+                ));
+                return;
+            }
+        }
+        if self.recipient_label.trim().len() > 160 {
+            self.status = Some((false, "Recipient label must be 160 bytes or less.".into()));
+            return;
+        }
+        if self.license_note.len() > 2_048 {
+            self.status = Some((false, "License note must be 2,048 bytes or less.".into()));
+            return;
+        }
         if self.package_name.trim().is_empty() {
             self.status = Some((false, "Enter a package name.".into()));
             return;
@@ -595,6 +711,11 @@ impl PrivoraApp {
         }
         let files = self.selected_files.clone();
         let name = self.package_name.trim().to_owned();
+        let policy = LicensePolicy {
+            valid_from,
+            recipient_label: Some(self.recipient_label.trim().to_owned()),
+            note: Some(self.license_note.trim().to_owned()),
+        };
         let (tx, rx) = mpsc::channel();
         self.create_rx = Some(rx);
         self.busy = true;
@@ -603,12 +724,19 @@ impl PrivoraApp {
             "Building archive and encrypting every chunk...".into(),
         ));
         thread::spawn(move || {
-            let result = create_package(&files, &output_path, &name, expiry, max_activations)
-                .map_err(|e| e.to_string())
-                .map(|created| CreatedUi {
-                    path: output_path,
-                    created,
-                });
+            let result = create_package_with_policy(
+                &files,
+                &output_path,
+                &name,
+                expiry,
+                max_activations,
+                policy,
+            )
+            .map_err(|e| e.to_string())
+            .map(|created| CreatedUi {
+                path: output_path,
+                created,
+            });
             let _ = tx.send(result);
         });
     }
@@ -617,29 +745,81 @@ impl PrivoraApp {
         page_header(
             ui,
             "Licenses",
-            "Review policies embedded in packages created on this computer.",
+            "Review the offline access rules attached to packages you created.",
         );
-        egui::Frame::new().fill(Color32::from_rgb(38, 28, 51)).stroke(Stroke::new(1.0, Color32::from_rgb(87, 53, 122)))
-            .corner_radius(egui::CornerRadius::same(10)).inner_margin(12).show(ui, |ui| {
+        egui::Frame::new()
+            .fill(Color32::from_rgb(38, 28, 51))
+            .stroke(Stroke::new(1.0, Color32::from_rgb(87, 53, 122)))
+            .corner_radius(egui::CornerRadius::same(10))
+            .inner_margin(12)
+            .show(ui, |ui| {
                 ui.label(RichText::new("Offline policy notice").strong().color(PURPLE_LIGHT));
-                ui.label(RichText::new("Expiration and activation counts are checked by this app. A purely offline app cannot revoke a package on another device or enforce a shared global activation counter.").size(13.0).color(MUTED));
+                ui.label(RichText::new("Dates and unlock counts are checked on this device. Offline policies cannot enforce one shared person/device count or remotely revoke a copied package.").size(13.0).color(MUTED));
             });
         ui.add_space(12.0);
+        ui.add_sized(
+            [ui.available_width(), 40.0],
+            egui::TextEdit::singleline(&mut self.license_search)
+                .hint_text("Search by package, recipient label, or file path..."),
+        );
+
+        let query = self.license_search.trim().to_lowercase();
+        let packages = self
+            .state
+            .packages
+            .iter()
+            .filter(|record| {
+                query.is_empty()
+                    || record.manifest.name.to_lowercase().contains(&query)
+                    || record
+                        .manifest
+                        .recipient_label
+                        .as_deref()
+                        .unwrap_or("")
+                        .to_lowercase()
+                        .contains(&query)
+                    || record.path.to_lowercase().contains(&query)
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+
+        ui.add_space(8.0);
         ui.horizontal(|ui| {
             ui.label(
-                RichText::new(format!("{} package(s)", self.state.packages.len()))
-                    .strong()
-                    .color(TEXT),
+                RichText::new(format!(
+                    "{} of {} package(s)",
+                    packages.len(),
+                    self.state.packages.len()
+                ))
+                .strong()
+                .color(TEXT),
             );
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                if primary_button(ui, "+ Generate Package").clicked() {
+                if primary_button(ui, "+ Create package").clicked() {
                     self.page = Page::Create;
                 }
             });
         });
         ui.add_space(8.0);
+
+        if packages.is_empty() {
+            if self.state.packages.is_empty() {
+                empty_panel(
+                    ui,
+                    "No licenses yet",
+                    "Create a .vora package to see its offline policy here.",
+                );
+            } else {
+                empty_panel(
+                    ui,
+                    "No matching packages",
+                    "Try a shorter search or clear the search field.",
+                );
+            }
+            return;
+        }
+
         egui::ScrollArea::vertical().show(ui, |ui| {
-            let packages = self.state.packages.clone();
             for record in packages {
                 let manifest = record.manifest;
                 let current_count = self
@@ -648,19 +828,27 @@ impl PrivoraApp {
                     .get(&record.fingerprint)
                     .copied()
                     .unwrap_or(0);
+                let today = Local::now().date_naive();
                 let expired = manifest
                     .expires_on
                     .as_deref()
                     .and_then(|d| NaiveDate::parse_from_str(d, "%Y-%m-%d").ok())
-                    .is_some_and(|d| Local::now().date_naive() > d);
+                    .is_some_and(|d| today > d);
+                let scheduled = manifest
+                    .valid_from
+                    .as_deref()
+                    .and_then(|d| NaiveDate::parse_from_str(d, "%Y-%m-%d").ok())
+                    .is_some_and(|d| today < d);
+                let limit_reached = current_count >= manifest.max_activations;
+
                 egui::Frame::new()
                     .fill(PANEL)
                     .stroke(Stroke::new(1.0, BORDER))
-                    .corner_radius(egui::CornerRadius::same(10))
+                    .corner_radius(egui::CornerRadius::same(11))
                     .inner_margin(14)
                     .show(ui, |ui| {
                         ui.horizontal(|ui| {
-                            icon_widget(ui, AppIcon::Package, 23.0, PURPLE_LIGHT);
+                            icon_widget(ui, AppIcon::Package, 24.0, PURPLE_LIGHT);
                             ui.vertical(|ui| {
                                 ui.label(
                                     RichText::new(&manifest.name)
@@ -671,7 +859,8 @@ impl PrivoraApp {
                                 ui.label(
                                     RichText::new(format!(
                                         "{} file(s) · {}",
-                                        manifest.file_count, record.path
+                                        manifest.file_count,
+                                        shorten_path(&record.path, 54)
                                     ))
                                     .size(11.5)
                                     .color(MUTED),
@@ -680,14 +869,23 @@ impl PrivoraApp {
                             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                                 let (label, color) = if expired {
                                     ("EXPIRED", RED)
+                                } else if scheduled {
+                                    ("SCHEDULED", PURPLE_LIGHT)
+                                } else if limit_reached {
+                                    ("LOCAL LIMIT REACHED", RED)
                                 } else {
-                                    ("LOCAL POLICY", GREEN)
+                                    ("AVAILABLE", GREEN)
                                 };
-                                ui.label(RichText::new(label).size(11.5).strong().color(color));
+                                ui.label(RichText::new(label).size(10.5).strong().color(color));
                             });
                         });
                         ui.add_space(8.0);
                         ui.horizontal_wrapped(|ui| {
+                            metadata_chip(
+                                ui,
+                                "Valid from",
+                                manifest.valid_from.as_deref().unwrap_or("Immediately"),
+                            );
                             metadata_chip(
                                 ui,
                                 "Expires",
@@ -695,27 +893,25 @@ impl PrivoraApp {
                             );
                             metadata_chip(
                                 ui,
-                                "Activation limit",
-                                &manifest.max_activations.to_string(),
+                                "Local unlocks",
+                                &format!("{current_count} / {}", manifest.max_activations),
                             );
-                            metadata_chip(ui, "This install", &format!("{current_count} used"));
+                            if let Some(recipient) = &manifest.recipient_label {
+                                metadata_chip(ui, "Recipient label", recipient);
+                            }
                             metadata_chip(
                                 ui,
                                 "Created",
                                 &manifest.created_at.chars().take(10).collect::<String>(),
                             );
+                            if record.has_private_note {
+                                metadata_chip(ui, "Encrypted note", "Included in .vora");
+                            }
                         });
                     });
                 ui.add_space(7.0);
             }
         });
-        if self.state.packages.is_empty() {
-            empty_panel(
-                ui,
-                "No licenses yet",
-                "Create a .vora package to see its offline policy here.",
-            );
-        }
     }
 
     fn draw_files(&mut self, ui: &mut egui::Ui) {
@@ -955,12 +1151,12 @@ impl PrivoraApp {
         egui::Frame::new().fill(PANEL).stroke(Stroke::new(1.0, BORDER)).corner_radius(egui::CornerRadius::same(12)).inner_margin(18).show(ui, |ui| {
             ui.heading(RichText::new("Local app data").size(16.0).strong().color(TEXT));
             ui.label(RichText::new(state_file_path().display().to_string()).size(12.5).color(MUTED));
-            ui.label(RichText::new("This file stores package history and unlock counters; it does not store access codes.").size(13.0).color(MUTED));
+            ui.label(RichText::new("This JSON stores package history, recipient labels and local counters. Secret access codes and private license-note text are not stored here.").size(13.0).color(MUTED));
         });
         ui.add_space(12.0);
         egui::Frame::new().fill(Color32::from_rgb(40, 23, 38)).stroke(Stroke::new(1.0, Color32::from_rgb(105, 48, 68))).corner_radius(egui::CornerRadius::same(12)).inner_margin(18).show(ui, |ui| {
             ui.heading(RichText::new("Security boundaries in this offline alpha").size(16.0).strong().color(RED));
-            ui.label(RichText::new("• Unlock limits are per local app profile, not a global people/device limit.\n• Expiration depends on the system clock and is not resistant to clock rollback.\n• Creating and unlocking uses temporary plaintext ZIP files; secure erasure is not guaranteed.\n• Creator-side package metadata is stored as local JSON; metadata inside the .vora v2 file is encrypted.\n• Once files are extracted as plaintext, Privora cannot control their later copying.\n• Anyone with both a .vora package and its access code can decrypt it.\n• Do not use this alpha for highly sensitive material before independent security review.").size(13.0).color(MUTED));
+            ui.label(RichText::new("• Unlock limits are per local app profile, not a global people/device limit.\n• Expiration depends on the system clock and is not resistant to clock rollback.\n• Creating and unlocking uses temporary plaintext ZIP files; secure erasure is not guaranteed.\n• Some creator-side metadata is stored as local JSON; the private license-note text is not copied there. Metadata inside the .vora v2 file is encrypted.\n• Once files are extracted as plaintext, Privora cannot control their later copying.\n• Anyone with both a .vora package and its access code can decrypt it.\n• Do not use this alpha for highly sensitive material before independent security review.").size(13.0).color(MUTED));
         });
     }
 }
@@ -1009,26 +1205,56 @@ impl eframe::App for PrivoraApp {
                             .stroke(Stroke::new(1.0, BORDER))
                             .show(ui, |ui| {
                                 ui.horizontal(|ui| {
+                                    let section = match self.page {
+                                        Page::Home => "Overview",
+                                        Page::Create => "Create package",
+                                        Page::Licenses => "Licenses",
+                                        Page::Files => "Open package",
+                                        Page::Settings => "Settings",
+                                    };
                                     ui.label(
                                         RichText::new("PRIVORA")
                                             .size(12.5)
                                             .strong()
                                             .color(PURPLE_LIGHT),
                                     );
+                                    ui.label(RichText::new("/  ").size(12.0).color(BORDER));
                                     ui.label(
-                                        RichText::new("/  OFFLINE WORKSPACE")
-                                            .size(11.5)
-                                            .color(MUTED),
+                                        RichText::new(section).size(13.0).strong().color(TEXT),
                                     );
                                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                                         if self.busy {
                                             ui.spinner();
                                             ui.label(
-                                                RichText::new("Working...")
+                                                RichText::new("Processing locally...")
                                                     .size(12.5)
                                                     .color(PURPLE_LIGHT),
                                             );
                                         } else {
+                                            egui::Frame::new()
+                                                .fill(Color32::from_rgb(16, 40, 39))
+                                                .stroke(Stroke::new(
+                                                    1.0,
+                                                    Color32::from_rgb(44, 91, 84),
+                                                ))
+                                                .corner_radius(egui::CornerRadius::same(20))
+                                                .inner_margin(egui::Margin::symmetric(9, 4))
+                                                .show(ui, |ui| {
+                                                    ui.horizontal(|ui| {
+                                                        ui.label(
+                                                            RichText::new("●")
+                                                                .size(9.0)
+                                                                .color(GREEN),
+                                                        );
+                                                        ui.label(
+                                                            RichText::new("OFFLINE MODE")
+                                                                .size(10.5)
+                                                                .strong()
+                                                                .color(GREEN),
+                                                        );
+                                                    });
+                                                });
+                                            ui.add_space(8.0);
                                             ui.label(
                                                 RichText::new(
                                                     Local::now().format("%d %b %Y").to_string(),

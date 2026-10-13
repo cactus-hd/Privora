@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.0 — UX and offline license policy
+
+- Refined navigation, page hierarchy, typography, spacing, empty states, and license search while retaining Privora's dark violet identity.
+- Added offline license policy fields: start date, expiry date, recipient label, and an encrypted private note.
+- Clarified that recipient labels are descriptive only and do not prove identity.
+- Expanded core tests to check that recipient labels, notes, and policy metadata are absent from the public `.vora` v2 bytes.
+- Added Windows installer packaging with Inno Setup, a PowerShell build helper, and step-by-step Windows/Android platform notes.
+- Added a size-conscious release profile using thin LTO, one codegen unit, and symbol stripping.
+- Documented Android blockers: desktop file dialogs, Activity setup, and Android Storage Access Framework integration must be implemented before the current app can ship as an APK.
+
 ## 0.2.0 — Offline alpha refresh
 
 - Replaced Unicode pictogram characters with small vector-drawn icons to avoid missing-glyph squares.
@@ -12,9 +22,4 @@
 
 ### Verification status
 
-This archive has been structurally checked, but this environment did not have a Rust toolchain available to run `cargo check` or `cargo test`. Run the checks in `README.md` on a machine with the specified Rust toolchain before relying on the build. This alpha has not undergone an independent security audit.
-
-## Build compatibility hotfix
-
-- Updated egui 0.36 theme styling calls to use `style_of(Theme::Dark)` and `set_style_of(Theme::Dark, ...)`.
-- Made custom vector icon coordinate literals explicitly `f32` so Rust type inference accepts the painter closures and coordinate arrays.
+This source archive was structurally checked, but the current environment does not have Rust/Cargo installed, so `cargo check`, `cargo test`, and desktop UI execution could not be run here. Run the checks in `README.md` on your development machine before relying on this build. No independent security audit has been performed.

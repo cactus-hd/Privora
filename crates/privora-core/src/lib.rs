@@ -1,3 +1,9 @@
+//! Privora's offline package core.
+//!
+//! `.vora` v2 encrypts the manifest separately from the payload, derives distinct
+//! metadata and payload keys with HKDF, and authenticates each 1 MiB payload chunk.
+//! The reader retains compatibility with v1 packages. This is still an offline
+//! prototype and is not a substitute for an independent security review.
 
 use aes_gcm::{
     Aes256Gcm, Nonce,
@@ -46,6 +52,8 @@ pub enum VoraError {
     UnsupportedVersion,
     #[error("The license code is invalid or malformed.")]
     InvalidCode,
+    #[error("This license becomes valid on {0}.")]
+    NotYetValid(String),
     #[error("The license expired on {0}.")]
     Expired(String),
     #[error(
@@ -72,6 +80,15 @@ pub struct Manifest {
     pub created_at: String,
     /// Inclusive local calendar date, formatted YYYY-MM-DD. `None` means no expiry.
     pub expires_on: Option<String>,
+    /// Earliest inclusive local calendar date, formatted YYYY-MM-DD. Optional for legacy packages.
+    #[serde(default)]
+    pub valid_from: Option<String>,
+    /// Optional descriptive recipient label. It is not identity verification.
+    #[serde(default)]
+    pub recipient_label: Option<String>,
+    /// Optional issuer note stored inside the encrypted manifest.
+    #[serde(default)]
+    pub license_note: Option<String>,
     /// Maximum successful unlocks recorded by this local installation.
     pub max_activations: u32,
     pub kdf: String,
@@ -101,6 +118,15 @@ pub struct PackageInfo {
     pub metadata_encrypted: bool,
 }
 
+/// Additional offline license claims carried inside the authenticated, encrypted manifest.
+/// These descriptive claims do not create global identity or device enforcement.
+#[derive(Debug, Clone, Default)]
+pub struct LicensePolicy {
+    pub valid_from: Option<NaiveDate>,
+    pub recipient_label: Option<String>,
+    pub note: Option<String>,
+}
+
 #[derive(Debug, Clone)]
 pub struct UnlockedPackage {
     pub manifest: Manifest,
@@ -124,6 +150,25 @@ pub fn create_package(
     expires_on: Option<NaiveDate>,
     max_activations: u32,
 ) -> Result<CreatedPackage> {
+    create_package_with_policy(
+        input_paths,
+        output_path,
+        package_name,
+        expires_on,
+        max_activations,
+        LicensePolicy::default(),
+    )
+}
+
+/// Create a package with extra offline policy metadata, all stored within the encrypted manifest.
+pub fn create_package_with_policy(
+    input_paths: &[PathBuf],
+    output_path: &Path,
+    package_name: &str,
+    expires_on: Option<NaiveDate>,
+    max_activations: u32,
+    policy: LicensePolicy,
+) -> Result<CreatedPackage> {
     if input_paths.is_empty() {
         return Err(VoraError::InvalidPackage(
             "Select at least one file.".into(),
@@ -144,6 +189,17 @@ pub fn create_package(
         return Err(VoraError::InvalidPackage(
             "Activation limit must be between 1 and 100,000.".into(),
         ));
+    }
+
+    let recipient_label =
+        normalize_optional_text(policy.recipient_label, 160, "Recipient label", false)?;
+    let license_note = normalize_optional_text(policy.note, 2_048, "License note", true)?;
+    if let (Some(start), Some(end)) = (policy.valid_from, expires_on) {
+        if start > end {
+            return Err(VoraError::InvalidPackage(
+                "The license start date must not be after its expiry date.".into(),
+            ));
+        }
     }
 
     let source_files = prepare_source_files(input_paths)?;
@@ -182,6 +238,9 @@ pub fn create_package(
         name: package_name.to_owned(),
         created_at: Utc::now().to_rfc3339(),
         expires_on: expires_on.map(|d| d.format("%Y-%m-%d").to_string()),
+        valid_from: policy.valid_from.map(|d| d.format("%Y-%m-%d").to_string()),
+        recipient_label,
+        license_note,
         max_activations,
         kdf: "Argon2id v1.3 (32 MiB, 3 iterations) + HKDF-SHA256".into(),
         cipher: "AES-256-GCM (encrypted manifest + 1 MiB authenticated chunks)".into(),
@@ -718,6 +777,30 @@ fn header_fingerprint(bytes: &[u8]) -> String {
     hex::encode(Sha256::digest(bytes))
 }
 
+fn normalize_optional_text(
+    value: Option<String>,
+    max_bytes: usize,
+    field_name: &str,
+    allow_newlines: bool,
+) -> Result<Option<String>> {
+    let Some(value) = value else { return Ok(None) };
+    let value = value.trim().to_owned();
+    if value.is_empty() {
+        return Ok(None);
+    }
+    if value.len() > max_bytes || value.contains('\0') {
+        return Err(VoraError::InvalidPackage(format!(
+            "{field_name} exceeds its size limit or contains a null character."
+        )));
+    }
+    if !allow_newlines && value.chars().any(char::is_control) {
+        return Err(VoraError::InvalidPackage(format!(
+            "{field_name} contains unsupported control characters."
+        )));
+    }
+    Ok(Some(value))
+}
+
 fn validate_manifest(manifest: &Manifest) -> Result<()> {
     if !(manifest.format_version == 1 || manifest.format_version == 2) {
         return Err(VoraError::UnsupportedVersion);
@@ -754,14 +837,48 @@ fn validate_manifest(manifest: &Manifest) -> Result<()> {
             "Invalid cryptographic metadata.".into(),
         ));
     }
+    if let Some(date) = &manifest.valid_from {
+        NaiveDate::parse_from_str(date, "%Y-%m-%d")
+            .map_err(|_| VoraError::InvalidPackage("Invalid license start date.".into()))?;
+    }
     if let Some(date) = &manifest.expires_on {
         NaiveDate::parse_from_str(date, "%Y-%m-%d")
             .map_err(|_| VoraError::InvalidPackage("Invalid expiry date.".into()))?;
+    }
+    if let (Some(start), Some(end)) = (&manifest.valid_from, &manifest.expires_on) {
+        let start = NaiveDate::parse_from_str(start, "%Y-%m-%d")
+            .map_err(|_| VoraError::InvalidPackage("Invalid license start date.".into()))?;
+        let end = NaiveDate::parse_from_str(end, "%Y-%m-%d")
+            .map_err(|_| VoraError::InvalidPackage("Invalid expiry date.".into()))?;
+        if start > end {
+            return Err(VoraError::InvalidPackage(
+                "The license start date is after its expiry date.".into(),
+            ));
+        }
+    }
+    if let Some(label) = &manifest.recipient_label {
+        if label.len() > 160 || label.chars().any(char::is_control) {
+            return Err(VoraError::InvalidPackage("Invalid recipient label.".into()));
+        }
+    }
+    if let Some(note) = &manifest.license_note {
+        if note.len() > 2_048 || note.contains('\0') {
+            return Err(VoraError::InvalidPackage(
+                "License note exceeds its limit or contains a null character.".into(),
+            ));
+        }
     }
     Ok(())
 }
 
 fn check_policy(manifest: &Manifest, prior_activations: u32) -> Result<()> {
+    if let Some(date) = &manifest.valid_from {
+        let valid_from = NaiveDate::parse_from_str(date, "%Y-%m-%d")
+            .map_err(|_| VoraError::InvalidPackage("Invalid license start date.".into()))?;
+        if Local::now().date_naive() < valid_from {
+            return Err(VoraError::NotYetValid(date.clone()));
+        }
+    }
     if let Some(date) = &manifest.expires_on {
         let expiry = NaiveDate::parse_from_str(date, "%Y-%m-%d")
             .map_err(|_| VoraError::InvalidPackage("Invalid expiry date.".into()))?;
@@ -867,8 +984,21 @@ mod tests {
         let source = temp.path().join("hello.txt");
         fs::write(&source, "Privora offline test 🟣").expect("write source");
         let package = temp.path().join("test.vora");
-        let created = create_package(&[source], &package, "Highly Private Project Name", None, 2)
-            .expect("create package");
+        let today = Local::now().date_naive();
+        let policy = LicensePolicy {
+            valid_from: Some(today),
+            recipient_label: Some("Recipient Confidential 4711".into()),
+            note: Some("Private agreement reference 93024".into()),
+        };
+        let created = create_package_with_policy(
+            &[source],
+            &package,
+            "Highly Private Project Name",
+            None,
+            2,
+            policy,
+        )
+        .expect("create package");
 
         let info = inspect_package(&package).expect("inspect public envelope");
         assert_eq!(info.format_version, 2);
@@ -892,10 +1022,35 @@ mod tests {
                 .any(|w| w == b"created_at")
         );
         assert!(!bytes.windows(b"Argon2id".len()).any(|w| w == b"Argon2id"));
+        assert!(
+            !bytes
+                .windows(b"Recipient Confidential 4711".len())
+                .any(|w| w == b"Recipient Confidential 4711")
+        );
+        assert!(
+            !bytes
+                .windows(b"Private agreement reference 93024".len())
+                .any(|w| w == b"Private agreement reference 93024")
+        );
+        assert!(
+            !bytes
+                .windows(b"valid_from".len())
+                .any(|w| w == b"valid_from")
+        );
 
         let manifest =
             inspect_package_with_code(&package, &created.access_code).expect("inspect with code");
+        let today_text = today.format("%Y-%m-%d").to_string();
         assert_eq!(manifest.name, "Highly Private Project Name");
+        assert_eq!(
+            manifest.recipient_label.as_deref(),
+            Some("Recipient Confidential 4711")
+        );
+        assert_eq!(
+            manifest.license_note.as_deref(),
+            Some("Private agreement reference 93024")
+        );
+        assert_eq!(manifest.valid_from.as_deref(), Some(today_text.as_str()));
         assert_eq!(manifest.format_version, 2);
         let output_root = temp.path().join("output");
         let opened =
@@ -936,6 +1091,9 @@ mod tests {
                     .format("%Y-%m-%d")
                     .to_string(),
             ),
+            valid_from: None,
+            recipient_label: None,
+            license_note: None,
             max_activations: 1,
             kdf: "Argon2id".into(),
             cipher: "AES-256-GCM".into(),
@@ -953,6 +1111,37 @@ mod tests {
         let mut no_expiry = manifest;
         no_expiry.expires_on = None;
         assert!(check_policy(&no_expiry, 0).is_ok());
+    }
+
+    #[test]
+    fn future_valid_from_policy_is_rejected() {
+        let manifest = Manifest {
+            format_version: 2,
+            package_id: "test-start-date".into(),
+            name: "scheduled".into(),
+            created_at: Utc::now().to_rfc3339(),
+            expires_on: None,
+            valid_from: Some(
+                (Local::now().date_naive() + chrono::Duration::days(2))
+                    .format("%Y-%m-%d")
+                    .to_string(),
+            ),
+            recipient_label: Some("Amir QA".into()),
+            license_note: Some("Confidential training materials".into()),
+            max_activations: 3,
+            kdf: "Argon2id".into(),
+            cipher: "AES-256-GCM".into(),
+            salt_hex: hex::encode([0u8; 16]),
+            nonce_prefix_hex: hex::encode([0u8; 8]),
+            plaintext_len: 1,
+            chunk_size: CHUNK_SIZE as u32,
+            file_count: 1,
+            total_file_bytes: 1,
+        };
+        assert!(matches!(
+            check_policy(&manifest, 0),
+            Err(VoraError::NotYetValid(_))
+        ));
     }
 
     #[test]

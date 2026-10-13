@@ -9,6 +9,9 @@ pub struct PackageRecord {
     pub path: String,
     #[serde(default)]
     pub fingerprint: String,
+    /// Indicates that the encrypted package contains an issuer note; the note itself is not copied into local JSON.
+    #[serde(default)]
+    pub has_private_note: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -59,15 +62,22 @@ impl LocalState {
         Ok(())
     }
 
-    pub fn add_package(&mut self, manifest: Manifest, path: String, fingerprint: String) {
+    pub fn add_package(&mut self, mut manifest: Manifest, path: String, fingerprint: String) {
         self.packages
             .retain(|p| p.manifest.package_id != manifest.package_id);
+        let has_private_note = manifest
+            .license_note
+            .as_deref()
+            .is_some_and(|note| !note.is_empty());
+        // The .vora contains the real encrypted note. Do not duplicate that note as plaintext in state.json.
+        manifest.license_note = None;
         self.packages.insert(
             0,
             PackageRecord {
                 manifest,
                 path,
                 fingerprint,
+                has_private_note,
             },
         );
         self.packages.truncate(100);
@@ -84,5 +94,39 @@ impl LocalState {
             },
         );
         self.unlocked.truncate(100);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn private_license_note_is_not_persisted_in_local_state() {
+        let mut state = LocalState::default();
+        let manifest = Manifest {
+            format_version: 2,
+            package_id: "local-state-test".into(),
+            name: "Sample package".into(),
+            created_at: "2026-10-09T00:00:00Z".into(),
+            expires_on: None,
+            valid_from: None,
+            recipient_label: Some("Recipient label".into()),
+            license_note: Some("CONFIDENTIAL-NOTE-DO-NOT-PERSIST".into()),
+            max_activations: 2,
+            kdf: "Argon2id".into(),
+            cipher: "AES-256-GCM".into(),
+            salt_hex: "00".repeat(16),
+            nonce_prefix_hex: "00".repeat(8),
+            plaintext_len: 1,
+            chunk_size: 1024 * 1024,
+            file_count: 1,
+            total_file_bytes: 1,
+        };
+        state.add_package(manifest, "sample.vora".into(), "fingerprint".into());
+        assert!(state.packages[0].has_private_note);
+        assert!(state.packages[0].manifest.license_note.is_none());
+        let serialized = serde_json::to_string(&state).expect("serialize local state");
+        assert!(!serialized.contains("CONFIDENTIAL-NOTE-DO-NOT-PERSIST"));
     }
 }
