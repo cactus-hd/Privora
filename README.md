@@ -165,8 +165,28 @@ privora-rust-v03/
 
 ## منابع فنی
 
+<<<<<<< HEAD
 - `eframe`: <https://docs.rs/eframe/latest/eframe/>
 - `aes-gcm`: <https://docs.rs/aes-gcm/latest/aes_gcm/>
 - `argon2`: <https://docs.rs/argon2/latest/argon2/>
 - `rfd`: <https://docs.rs/rfd/latest/rfd/>
 - `zip`: <https://docs.rs/zip/latest/zip/>
+=======
+Privora is **source-available, not OSI-approved open-source software**. The custom [Privora Personal Learning and Non-Commercial License](LICENSE) allows private personal use, educational study, and non-commercial experimentation while restricting commercial use and redistribution. Read the complete terms before using the source or binaries.
+
+If you need to prevent the public from viewing or forking the source, keep the repository private. GitHub's own Terms of Service govern public repository viewing and platform-hosted forks; a custom license cannot turn a public repository into a private one.
+
+---
+
+## ⭐ Support the project
+
+If Privora helps you with your works, starring the repository is a simple way to support the project ⭐ .
+
+---
+
+<div align="center">
+
+**PRIVORA** · Create · Encrypt · License · Share
+
+</div>
+>>>>>>> f13d45950d242710e80d887b396ca95e8288690e
