@@ -22,6 +22,40 @@ pub struct UnlockRecord {
     pub file_count: usize,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
+pub struct AppPreferences {
+    /// "Midnight" or "OLED Black".
+    pub appearance: String,
+    /// "Violet", "Blue", "Mint", or "Rose".
+    pub accent: String,
+    pub ui_scale: f32,
+    pub compact_mode: bool,
+    pub animations_enabled: bool,
+    pub confirm_before_unlock: bool,
+    pub clear_access_code_after_unlock: bool,
+    pub remember_export_folder: bool,
+    pub keep_unlock_history: bool,
+    pub show_full_paths: bool,
+}
+
+impl Default for AppPreferences {
+    fn default() -> Self {
+        Self {
+            appearance: "Midnight".into(),
+            accent: "Violet".into(),
+            ui_scale: 1.0,
+            compact_mode: false,
+            animations_enabled: true,
+            confirm_before_unlock: true,
+            clear_access_code_after_unlock: true,
+            remember_export_folder: true,
+            keep_unlock_history: true,
+            show_full_paths: false,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct LocalState {
@@ -30,6 +64,7 @@ pub struct LocalState {
     pub activation_counts: HashMap<String, u32>,
     pub unlocked: Vec<UnlockRecord>,
     pub export_folder: String,
+    pub preferences: AppPreferences,
 }
 
 pub fn state_file_path() -> PathBuf {
@@ -100,6 +135,26 @@ impl LocalState {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn legacy_state_without_preferences_uses_defaults() {
+        let legacy = br#"{"packages":[],"activation_counts":{},"unlocked":[],"export_folder":""}"#;
+        let state: LocalState =
+            serde_json::from_slice(legacy).expect("legacy state remains readable");
+        assert_eq!(state.preferences, AppPreferences::default());
+    }
+
+    #[test]
+    fn preferences_round_trip_through_local_state_json() {
+        let mut state = LocalState::default();
+        state.preferences.accent = "Rose".into();
+        state.preferences.ui_scale = 1.2;
+        state.preferences.compact_mode = true;
+        let encoded = serde_json::to_vec(&state).expect("serialize preferences");
+        let decoded: LocalState =
+            serde_json::from_slice(&encoded).expect("deserialize preferences");
+        assert_eq!(decoded.preferences, state.preferences);
+    }
 
     #[test]
     fn private_license_note_is_not_persisted_in_local_state() {

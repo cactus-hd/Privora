@@ -1,23 +1,32 @@
-# Privora UI/UX direction (v0.3)
+# Privora UI/UX direction (v0.4)
 
-## Direction
+## Product feel
 
-Privora is a quiet, privacy-focused utility, not a promotional website. The interface uses a dark ink background, low-saturation violet as the primary accent, clear neutral text, and restrained green/red only for meaningful success or failure states. The intended feeling is controlled and dependable, not cyberpunk or alarmist.
+Privora should feel calm, precise, and premium rather than dense or cyberpunk. The inspiration is modern Apple utility software: strong typographic hierarchy, generous spacing, restrained color, direct language, and short task flows. It is still a native Rust/egui interface, not a web design system.
 
-## What changed in v0.3
+## Visual system
 
-- Consistent larger body text and control sizing.
-- More whitespace between concepts, with page title + explanatory subtitle.
-- Clearer hierarchy between the selected content, package identity, and optional license policies.
-- Explicit recipient label, validity start, expiry, local unlock limit and private note.
-- Searchable license history and status labels for scheduled, available, expired, and locally exhausted policies.
-- Empty-state actions that lead to the next useful step.
-- Vector icons painted by egui rather than Unicode glyphs that depend on the installed font.
+- Base appearance: Midnight; optional OLED Black background mode.
+- Accent choices: Violet, Ocean blue, Mint, and Rose.
+- High-contrast neutral text; accent color is reserved for selected navigation, primary actions, and small emphasis.
+- Rounded panel corners, thinner borders, softer selected-state treatment, and wider page gutters.
+- Native vector icons are drawn with egui primitives rather than system font glyphs.
+- System font is used when available (Segoe UI on Windows, system sans-serif fallbacks elsewhere).
+- Interface scale can be changed from 85% through 130%.
 
-## Taste-Skill research notes
+## Interaction model
 
-The linked [taste-skill](https://github.com/Leonxlnx/taste-skill) is primarily aimed at landing pages, portfolios and redesigns. Its own README/skill says dashboards, data tables and multi-step product UI are out of scope. For Privora, its audit-first approach, explicit design direction, restraint, and anti-template checks are useful; applying its web-specific rules wholesale to a native `egui` utility would be a mismatch.
+- Navigation uses animated selected-state indicators; motion can be disabled.
+- Compact mode reduces spacing and control padding for smaller windows.
+- Decryption can require an explicit confirmation before plaintext files are written.
+- Access codes can be automatically cleared after successful unlock.
+- The user can disable recent unlock history, choose whether paths are shown in full, and opt out of storing the last extraction folder.
+- Settings preview immediately; saving persists preferences to local app state. Reset to defaults is explicit.
 
-## Pre-release visual check
+## Review checklist
 
-Test the window at 960x640 and 1280x820 or larger. Check all five pages, long paths, non-English filenames, empty lists, error banners, narrow window resizing, text scaling, and the whole create/unlock workflow. Do not judge only the Home page. The current environment did not have Rust installed, so the visual QA must be performed on a Windows build machine.
+Test Windows at 1040x700 and 1360x900. Test OLED mode and each accent. Verify UI scaling, compact mode, reduced motion, clear activity, remembered folder disabled, confirmation before unlock, and access-code clearing. Confirm the user can create a package and import/unlock an existing package after changing every preference.
+
+## Limitations
+
+Some older form/page surfaces remain hand-drawn and may not reflect every OLED shade perfectly. Do not claim native macOS glass materials; the look is an egui approximation. Review actual screenshots on Windows before calling the design complete.

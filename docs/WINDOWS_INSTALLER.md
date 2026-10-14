@@ -43,7 +43,7 @@ This performs formatting checks, builds the release executable, then invokes `IS
 Expected installer:
 
 ```text
-dist\Privora-Setup-0.3.0-x64.exe
+dist\Privora-Setup-0.4.0-x64.exe
 ```
 
 If Inno Setup is installed but the script cannot find its compiler, add the folder containing `ISCC.exe` to PATH or compile `packaging\windows\Privora.iss` from the Inno Setup GUI.

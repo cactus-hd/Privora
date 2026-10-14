@@ -1,7 +1,7 @@
 # AGENTS.md — Privora Rust
 
 ## Product scope
-Privora Offline Alpha protects arbitrary files inside a versioned `.vora` container. The current release is desktop Offline Alpha v0.3 using the encrypted-manifest v2 layout with v1 read compatibility, local policy fields, and an Inno Setup package recipe. Android is not yet build-ready until SAF/file picker and native project integration are implemented. Do not claim global offline activation enforcement, remote revocation, or uncrackable DRM.
+Privora Offline Alpha protects arbitrary files inside a versioned `.vora` container. The current release is desktop Offline Alpha v0.4 using the encrypted-manifest v2 layout with v1 read compatibility, local policy fields, and an Inno Setup package recipe. Android is not yet build-ready until SAF/file picker and native project integration are implemented. Do not claim global offline activation enforcement, remote revocation, or uncrackable DRM.
 
 ## Architecture rules
 - `crates/privora-core` owns container parsing, cryptographic operations, policy checks and safe extraction. It must not depend on egui, eframe, rfd or UI state.

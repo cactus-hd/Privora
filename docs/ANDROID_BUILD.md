@@ -2,7 +2,7 @@
 
 ## Current status: not build-ready as an APK
 
-The core `.vora` engine is Rust and `eframe` has Android support, but this specific v0.3 app is still a desktop application. It uses `rfd::FileDialog` for open/save/folder dialogs; `rfd` 0.17.2 documents Linux, Windows and macOS support, not Android. The repository also does not yet include an Android app entry point, manifest/Gradle packaging project, or Android Storage Access Framework (SAF) bridge. Therefore, merely adding a Rust Android target will **not** produce a working Privora APK.
+The core `.vora` engine is Rust and `eframe` has Android support, but this specific v0.4 app is still a desktop application. It uses `rfd::FileDialog` for open/save/folder dialogs; `rfd` 0.17.2 documents Linux, Windows and macOS support, not Android. The repository also does not yet include an Android app entry point, manifest/Gradle packaging project, or Android Storage Access Framework (SAF) bridge. Therefore, merely adding a Rust Android target will **not** produce a working Privora APK.
 
 ## 1. Install the Android toolchain
 

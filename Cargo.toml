@@ -4,10 +4,12 @@ members = ["crates/privora-core", "apps/privora-desktop"]
 default-members = ["apps/privora-desktop", "crates/privora-core"]
 
 [workspace.package]
-version = "0.3.0"
+version = "0.4.0"
 edition = "2024"
-license = "MIT"
-authors = ["Privora Project"]
+license-file = "LICENSE"
+authors = ["cactus-hd / Privora Project"]
+repository = "https://github.com/cactus-hd/Privora"
+description = "Offline-first encrypted file packaging prototype written in Rust"
 
 [workspace.dependencies]
 aes-gcm = "=0.11.1"

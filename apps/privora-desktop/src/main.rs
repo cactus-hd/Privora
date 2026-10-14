@@ -6,8 +6,8 @@ mod state;
 fn main() -> eframe::Result<()> {
     let options = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()
-            .with_inner_size([1280.0, 820.0])
-            .with_min_inner_size([960.0, 640.0]),
+            .with_inner_size([1360.0, 900.0])
+            .with_min_inner_size([1040.0, 700.0]),
         ..Default::default()
     };
     eframe::run_native(

@@ -1,5 +1,5 @@
 #define MyAppName "Privora"
-#define MyAppVersion "0.3.0"
+#define MyAppVersion "0.4.0"
 #define MyAppPublisher "Privora"
 #define MyAppExeName "privora-desktop.exe"
 

@@ -1,4 +1,4 @@
-use crate::state::{LocalState, state_file_path};
+use crate::state::{AppPreferences, LocalState, state_file_path};
 use chrono::{Local, NaiveDate};
 use eframe::egui::{self, Align, Color32, FontId, Layout, RichText, Stroke, Vec2};
 use privora_core::{
@@ -7,22 +7,151 @@ use privora_core::{
 };
 use std::{
     fs,
-    path::PathBuf,
-    sync::mpsc::{self, Receiver},
+    path::{Path, PathBuf},
+    sync::{
+        atomic::{AtomicU8, Ordering},
+        mpsc::{self, Receiver},
+    },
     thread,
 };
 
-const BG: Color32 = Color32::from_rgb(10, 12, 25);
-const SIDEBAR: Color32 = Color32::from_rgb(12, 17, 34);
-const PANEL: Color32 = Color32::from_rgb(17, 23, 43);
-const PANEL_2: Color32 = Color32::from_rgb(21, 28, 51);
-const BORDER: Color32 = Color32::from_rgb(42, 47, 76);
-const PURPLE: Color32 = Color32::from_rgb(173, 87, 255);
-const PURPLE_LIGHT: Color32 = Color32::from_rgb(204, 137, 255);
 const TEXT: Color32 = Color32::from_rgb(244, 241, 250);
 const MUTED: Color32 = Color32::from_rgb(156, 163, 187);
 const GREEN: Color32 = Color32::from_rgb(71, 207, 160);
 const RED: Color32 = Color32::from_rgb(255, 101, 126);
+
+static APPEARANCE_MODE: AtomicU8 = AtomicU8::new(0);
+static ACCENT_MODE: AtomicU8 = AtomicU8::new(0);
+
+fn configure_runtime_palette(preferences: &AppPreferences) {
+    APPEARANCE_MODE.store(
+        if preferences.appearance == "OLED Black" {
+            1
+        } else {
+            0
+        },
+        Ordering::Relaxed,
+    );
+    let accent = match preferences.accent.as_str() {
+        "Blue" => 1,
+        "Mint" => 2,
+        "Rose" => 3,
+        _ => 0,
+    };
+    ACCENT_MODE.store(accent, Ordering::Relaxed);
+}
+
+fn accent_main() -> Color32 {
+    match ACCENT_MODE.load(Ordering::Relaxed) {
+        1 => Color32::from_rgb(75, 133, 255),
+        2 => Color32::from_rgb(40, 183, 151),
+        3 => Color32::from_rgb(226, 91, 151),
+        _ => Color32::from_rgb(157, 91, 255),
+    }
+}
+
+fn accent_soft() -> Color32 {
+    match ACCENT_MODE.load(Ordering::Relaxed) {
+        1 => Color32::from_rgb(145, 184, 255),
+        2 => Color32::from_rgb(116, 230, 202),
+        3 => Color32::from_rgb(255, 155, 196),
+        _ => Color32::from_rgb(205, 160, 255),
+    }
+}
+
+fn surface_bg() -> Color32 {
+    if APPEARANCE_MODE.load(Ordering::Relaxed) == 1 {
+        Color32::from_rgb(0, 0, 0)
+    } else {
+        Color32::from_rgb(10, 12, 25)
+    }
+}
+fn sidebar_bg() -> Color32 {
+    if APPEARANCE_MODE.load(Ordering::Relaxed) == 1 {
+        Color32::from_rgb(5, 5, 8)
+    } else {
+        Color32::from_rgb(12, 17, 34)
+    }
+}
+fn panel_bg() -> Color32 {
+    if APPEARANCE_MODE.load(Ordering::Relaxed) == 1 {
+        Color32::from_rgb(9, 9, 13)
+    } else {
+        Color32::from_rgb(17, 23, 43)
+    }
+}
+fn panel_raised() -> Color32 {
+    if APPEARANCE_MODE.load(Ordering::Relaxed) == 1 {
+        Color32::from_rgb(17, 17, 23)
+    } else {
+        Color32::from_rgb(21, 28, 51)
+    }
+}
+fn border_color() -> Color32 {
+    if APPEARANCE_MODE.load(Ordering::Relaxed) == 1 {
+        Color32::from_rgb(41, 41, 52)
+    } else {
+        Color32::from_rgb(42, 47, 76)
+    }
+}
+
+fn apply_visual_preferences(ctx: &egui::Context, preferences: &AppPreferences) {
+    configure_runtime_palette(preferences);
+    let mut visuals = egui::Visuals::dark();
+    visuals.panel_fill = surface_bg();
+    visuals.window_fill = panel_bg();
+    visuals.extreme_bg_color = if preferences.appearance == "OLED Black" {
+        Color32::from_rgb(0, 0, 0)
+    } else {
+        Color32::from_rgb(7, 9, 19)
+    };
+    visuals.faint_bg_color = panel_raised();
+    visuals.selection.bg_fill = accent_main();
+    visuals.selection.stroke = Stroke::new(1.0, accent_soft());
+    visuals.widgets.inactive.bg_fill = panel_raised();
+    visuals.widgets.inactive.fg_stroke.color = TEXT;
+    visuals.widgets.hovered.bg_fill = Color32::from_rgba_unmultiplied(
+        accent_main().r(),
+        accent_main().g(),
+        accent_main().b(),
+        42,
+    );
+    visuals.widgets.hovered.fg_stroke.color = TEXT;
+    visuals.widgets.active.bg_fill = accent_main();
+    visuals.widgets.active.fg_stroke.color = Color32::WHITE;
+    ctx.set_visuals(visuals);
+
+    let mut style = (*ctx.style_of(egui::Theme::Dark)).clone();
+    style
+        .text_styles
+        .insert(egui::TextStyle::Body, FontId::proportional(14.0));
+    style
+        .text_styles
+        .insert(egui::TextStyle::Button, FontId::proportional(14.0));
+    style
+        .text_styles
+        .insert(egui::TextStyle::Small, FontId::proportional(12.0));
+    style
+        .text_styles
+        .insert(egui::TextStyle::Heading, FontId::proportional(24.0));
+    style.spacing.item_spacing = if preferences.compact_mode {
+        egui::vec2(8.0, 6.0)
+    } else {
+        egui::vec2(12.0, 10.0)
+    };
+    style.spacing.button_padding = if preferences.compact_mode {
+        egui::vec2(12.0, 7.0)
+    } else {
+        egui::vec2(16.0, 10.0)
+    };
+    style.animation_time = if preferences.animations_enabled {
+        0.22
+    } else {
+        0.0
+    };
+    ctx.set_style_of(egui::Theme::Dark, style);
+    ctx.set_zoom_factor(preferences.ui_scale.clamp(0.85, 1.30));
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Page {
@@ -64,35 +193,32 @@ pub struct PrivoraApp {
     selected_package_info: Option<PackageInfo>,
     access_code: String,
     export_folder: String,
+    confirm_unlock_pending: bool,
 }
 
 impl PrivoraApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         configure_fonts(&cc.egui_ctx);
-        let mut visuals = egui::Visuals::dark();
-        visuals.panel_fill = BG;
-        visuals.window_fill = PANEL;
-        visuals.extreme_bg_color = Color32::from_rgb(7, 9, 19);
-        visuals.faint_bg_color = PANEL_2;
-        visuals.selection.bg_fill = Color32::from_rgb(84, 45, 137);
-        visuals.selection.stroke = Stroke::new(1.0, PURPLE_LIGHT);
-        visuals.widgets.inactive.bg_fill = PANEL_2;
-        visuals.widgets.inactive.fg_stroke.color = TEXT;
-        visuals.widgets.hovered.bg_fill = Color32::from_rgb(49, 39, 76);
-        visuals.widgets.hovered.fg_stroke.color = TEXT;
-        visuals.widgets.active.bg_fill = PURPLE;
-        visuals.widgets.active.fg_stroke.color = Color32::WHITE;
-        cc.egui_ctx.set_visuals(visuals);
-
         let mut state = LocalState::load();
-        if state.export_folder.trim().is_empty() {
-            state.export_folder = dirs::download_dir()
-                .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| std::env::temp_dir()))
-                .join("Privora-Unlocked")
-                .to_string_lossy()
-                .to_string();
+        apply_visual_preferences(&cc.egui_ctx, &state.preferences);
+
+        let default_export = dirs::download_dir()
+            .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| std::env::temp_dir()))
+            .join("Privora-Unlocked")
+            .to_string_lossy()
+            .to_string();
+        let export_folder =
+            if state.preferences.remember_export_folder && !state.export_folder.trim().is_empty() {
+                state.export_folder.clone()
+            } else {
+                if !state.preferences.remember_export_folder {
+                    state.export_folder.clear();
+                }
+                default_export
+            };
+        if state.preferences.remember_export_folder && state.export_folder.trim().is_empty() {
+            state.export_folder = export_folder.clone();
         }
-        let export_folder = state.export_folder.clone();
         Self {
             page: Page::Home,
             state,
@@ -117,6 +243,7 @@ impl PrivoraApp {
             selected_package_info: None,
             access_code: String::new(),
             export_folder,
+            confirm_unlock_pending: false,
         }
     }
 
@@ -157,18 +284,24 @@ impl PrivoraApp {
                     let unlocked = result.unlocked;
                     let fingerprint = unlocked.package_fingerprint.clone();
                     *self.state.activation_counts.entry(fingerprint).or_insert(0) += 1;
-                    self.state.add_unlock(
-                        unlocked.manifest.name.clone(),
-                        unlocked.output_dir.to_string_lossy().to_string(),
-                        unlocked.written_files.len(),
-                    );
+                    if self.state.preferences.keep_unlock_history {
+                        self.state.add_unlock(
+                            unlocked.manifest.name.clone(),
+                            unlocked.output_dir.to_string_lossy().to_string(),
+                            unlocked.written_files.len(),
+                        );
+                    }
                     self.export_folder = unlocked
                         .output_dir
                         .parent()
                         .unwrap_or(&unlocked.output_dir)
                         .to_string_lossy()
                         .to_string();
-                    self.state.export_folder = self.export_folder.clone();
+                    if self.state.preferences.remember_export_folder {
+                        self.state.export_folder = self.export_folder.clone();
+                    } else {
+                        self.state.export_folder.clear();
+                    }
                     self.status = Some((
                         true,
                         format!(
@@ -177,7 +310,9 @@ impl PrivoraApp {
                             unlocked.output_dir.display()
                         ),
                     ));
-                    self.access_code.clear();
+                    if self.state.preferences.clear_access_code_after_unlock {
+                        self.access_code.clear();
+                    }
                     if let Err(e) = self.state.save() {
                         self.status = Some((
                             false,
@@ -193,64 +328,116 @@ impl PrivoraApp {
     }
 
     fn draw_sidebar(&mut self, ui: &mut egui::Ui) {
-        ui.add_space(4.0);
-        ui.horizontal(|ui| {
-            ui.label(
-                RichText::new("P")
-                    .font(FontId::proportional(29.0))
-                    .strong()
-                    .color(PURPLE_LIGHT),
-            );
-            ui.vertical(|ui| {
-                ui.label(RichText::new("Privora").size(21.0).strong().color(TEXT));
-                ui.label(RichText::new("OFFLINE VAULT").size(11.5).color(MUTED));
+        ui.add_space(10.0);
+        egui::Frame::new()
+            .fill(Color32::from_rgba_unmultiplied(
+                accent_main().r(),
+                accent_main().g(),
+                accent_main().b(),
+                22,
+            ))
+            .corner_radius(egui::CornerRadius::same(15))
+            .inner_margin(egui::Margin::symmetric(10, 12))
+            .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    let (logo_rect, _) =
+                        ui.allocate_exact_size(Vec2::splat(38.0), egui::Sense::hover());
+                    ui.painter().rect_filled(
+                        logo_rect,
+                        egui::CornerRadius::same(12),
+                        accent_main(),
+                    );
+                    ui.painter().text(
+                        logo_rect.center(),
+                        egui::Align2::CENTER_CENTER,
+                        "P",
+                        FontId::proportional(26.0),
+                        Color32::WHITE,
+                    );
+                    ui.vertical(|ui| {
+                        ui.label(RichText::new("Privora").size(20.0).strong().color(TEXT));
+                        ui.label(
+                            RichText::new("PRIVATE WORKSPACE")
+                                .size(9.5)
+                                .strong()
+                                .color(MUTED),
+                        );
+                    });
+                });
             });
-        });
-        ui.add_space(26.0);
+
+        ui.add_space(25.0);
+        ui.label(RichText::new("WORKSPACE").size(10.5).strong().color(MUTED));
+        ui.add_space(8.0);
         let items = [
-            (Page::Home, AppIcon::Home, "Home"),
-            (Page::Create, AppIcon::Create, "Create Package"),
+            (Page::Home, AppIcon::Home, "Overview"),
+            (Page::Create, AppIcon::Create, "Create package"),
             (Page::Licenses, AppIcon::License, "Licenses"),
-            (Page::Files, AppIcon::Folder, "Files / Unlock"),
-            (Page::Settings, AppIcon::Settings, "Settings"),
+            (Page::Files, AppIcon::Folder, "Open package"),
         ];
         for (page, icon, label) in items {
-            if nav_button(ui, self.page == page, icon, label) {
+            if nav_button(
+                ui,
+                self.page == page,
+                icon,
+                label,
+                self.state.preferences.animations_enabled,
+                self.state.preferences.compact_mode,
+            ) {
                 self.page = page;
             }
             ui.add_space(5.0);
         }
+        ui.add_space(22.0);
+        ui.label(
+            RichText::new("PREFERENCES")
+                .size(10.5)
+                .strong()
+                .color(MUTED),
+        );
+        ui.add_space(8.0);
+        if nav_button(
+            ui,
+            self.page == Page::Settings,
+            AppIcon::Settings,
+            "Settings",
+            self.state.preferences.animations_enabled,
+            self.state.preferences.compact_mode,
+        ) {
+            self.page = Page::Settings;
+        }
+
         ui.with_layout(Layout::bottom_up(Align::LEFT), |ui| {
+            ui.add_space(8.0);
+            ui.label(
+                RichText::new("PRIVORA  •  ALPHA 0.4")
+                    .size(10.5)
+                    .color(MUTED),
+            );
             egui::Frame::new()
-                .fill(Color32::from_rgb(15, 21, 42))
-                .stroke(Stroke::new(1.0, BORDER))
-                .corner_radius(egui::CornerRadius::same(10))
+                .fill(panel_raised())
+                .stroke(Stroke::new(1.0, border_color()))
+                .corner_radius(egui::CornerRadius::same(14))
                 .inner_margin(12)
                 .show(ui, |ui| {
                     ui.horizontal(|ui| {
-                        icon_widget(ui, AppIcon::Shield, 22.0, PURPLE_LIGHT);
+                        icon_widget(ui, AppIcon::Shield, 21.0, accent_soft());
                         ui.vertical(|ui| {
                             ui.label(
                                 RichText::new("Local-first privacy")
-                                    .size(14.0)
+                                    .size(12.5)
                                     .strong()
                                     .color(TEXT),
                             );
                             ui.label(
                                 RichText::new("No account · No server")
-                                    .size(12.5)
+                                    .size(11.0)
                                     .color(MUTED),
                             );
                         });
                     });
                 });
             ui.add_space(12.0);
-            ui.label(
-                RichText::new("PRIVORA  •  ALPHA 0.3")
-                    .size(12.5)
-                    .color(MUTED),
-            );
-            ui.add_space(8.0);
         });
     }
 
@@ -258,22 +445,22 @@ impl PrivoraApp {
         page_header(
             ui,
             "Your private workspace",
-            "A calmer way to package and share files with access rules.",
+            "A calm, local-first way to protect files and share them with explicit access rules.",
         );
 
         egui::Frame::new()
-            .fill(Color32::from_rgb(20, 17, 42))
-            .stroke(Stroke::new(1.0, Color32::from_rgb(82, 57, 125)))
-            .corner_radius(egui::CornerRadius::same(16))
-            .inner_margin(egui::Margin::symmetric(23, 21))
+            .fill(Color32::from_rgba_unmultiplied(accent_main().r(), accent_main().g(), accent_main().b(), 21))
+            .stroke(Stroke::new(1.0, Color32::from_rgba_unmultiplied(accent_soft().r(), accent_soft().g(), accent_soft().b(), 95)))
+            .corner_radius(egui::CornerRadius::same(20))
+            .inner_margin(egui::Margin::symmetric(28, 26))
             .show(ui, |ui| {
                 ui.columns(2, |cols| {
                     cols[0].vertical(|ui| {
-                        ui.label(RichText::new("PRIVATE BY DESIGN").size(11.5).strong().color(PURPLE_LIGHT));
+                        ui.label(RichText::new("PRIVATE BY DESIGN").size(11.5).strong().color(accent_soft()));
                         ui.add_space(7.0);
-                        ui.heading(RichText::new("Share what should stay yours.").size(30.0).strong().color(TEXT));
+                        ui.heading(RichText::new("Your files. Your rules.").size(32.0).strong().color(TEXT));
                         ui.add_space(8.0);
-                        ui.label(RichText::new("Bundle documents, images, audio and video into one encrypted .vora package. Keep the access code separate.").size(14.0).color(MUTED));
+                        ui.label(RichText::new("Package documents, photos, audio and video into a protected .vora file. Keep the access code separate and decide when the package can be opened.").size(14.0).color(MUTED));
                         ui.add_space(15.0);
                         if primary_button(ui, "Create a protected package  →").clicked() {
                             self.page = Page::Create;
@@ -284,12 +471,12 @@ impl PrivoraApp {
                     cols[1].vertical_centered(|ui| {
                         ui.add_space(8.0);
                         egui::Frame::new()
-                            .fill(Color32::from_rgb(31, 20, 61))
+                            .fill(Color32::from_rgba_unmultiplied(accent_main().r(), accent_main().g(), accent_main().b(), 28))
                             .stroke(Stroke::new(1.0, Color32::from_rgb(98, 64, 149)))
                             .corner_radius(egui::CornerRadius::same(22))
                             .inner_margin(egui::Margin::same(24))
                             .show(ui, |ui| {
-                                icon_widget(ui, AppIcon::Package, 62.0, PURPLE_LIGHT);
+                                icon_widget(ui, AppIcon::Package, 62.0, accent_soft());
                                 ui.add_space(5.0);
                                 icon_widget(ui, AppIcon::Shield, 25.0, GREEN);
                             });
@@ -309,7 +496,7 @@ impl PrivoraApp {
                 .inner_margin(egui::Margin::symmetric(18, 16))
                 .show(&mut cols[0], |ui| {
                     ui.horizontal(|ui| {
-                        icon_widget(ui, AppIcon::Package, 37.0, PURPLE_LIGHT);
+                        icon_widget(ui, AppIcon::Package, 37.0, accent_soft());
                         ui.vertical(|ui| {
                             ui.label(RichText::new("Protected packages").size(13.0).strong().color(TEXT));
                             ui.label(RichText::new(self.state.packages.len().to_string()).size(34.0).strong().color(TEXT));
@@ -346,7 +533,7 @@ impl PrivoraApp {
             );
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 if ui
-                    .link(RichText::new("View all  →").color(PURPLE_LIGHT))
+                    .link(RichText::new("View all  →").color(accent_soft()))
                     .clicked()
                 {
                     self.page = Page::Licenses;
@@ -356,13 +543,13 @@ impl PrivoraApp {
         ui.add_space(9.0);
         if self.state.packages.is_empty() {
             egui::Frame::new()
-                .fill(PANEL)
-                .stroke(Stroke::new(1.0, BORDER))
+                .fill(panel_bg())
+                .stroke(Stroke::new(1.0, border_color()))
                 .corner_radius(egui::CornerRadius::same(12))
                 .inner_margin(egui::Margin::symmetric(20, 22))
                 .show(ui, |ui| {
                     ui.horizontal(|ui| {
-                        icon_widget(ui, AppIcon::Package, 33.0, PURPLE_LIGHT);
+                        icon_widget(ui, AppIcon::Package, 33.0, accent_soft());
                         ui.vertical(|ui| {
                             ui.label(RichText::new("Your first package starts here").strong().color(TEXT));
                             ui.label(RichText::new("Select files, define a validity window, then create a .vora package.").color(MUTED));
@@ -383,15 +570,16 @@ impl PrivoraApp {
                         .take(5)
                         .cloned()
                         .collect::<Vec<_>>();
+                    let show_full_paths = self.state.preferences.show_full_paths;
                     for record in records {
-                        package_row(ui, &record.manifest, &record.path);
+                        package_row(ui, &record.manifest, &record.path, show_full_paths);
                     }
                 });
         }
         ui.add_space(14.0);
         egui::Frame::new()
             .fill(Color32::from_rgb(15, 23, 39))
-            .stroke(Stroke::new(1.0, BORDER))
+            .stroke(Stroke::new(1.0, border_color()))
             .corner_radius(egui::CornerRadius::same(10))
             .inner_margin(12)
             .show(ui, |ui| {
@@ -423,7 +611,7 @@ impl PrivoraApp {
                     ui.label(RichText::new(created.path.display().to_string()).size(12.5).color(TEXT));
                     ui.add_space(3.0);
                     ui.label(RichText::new("ACCESS CODE — this code unlocks the package").size(12.0).strong().color(MUTED));
-                    ui.add(egui::Label::new(RichText::new(&created.created.access_code).font(FontId::monospace(14.0)).color(PURPLE_LIGHT)).selectable(true));
+                    ui.add(egui::Label::new(RichText::new(&created.created.access_code).font(FontId::monospace(14.0)).color(accent_soft())).selectable(true));
                     ui.add_space(5.0);
                     ui.label(RichText::new("Save the code somewhere safe. The .vora file does not contain it.").size(12.0).color(MUTED));
                     ui.horizontal_wrapped(|ui| {
@@ -519,26 +707,26 @@ impl PrivoraApp {
         ui.horizontal(|ui| {
             step_badge(ui, "1", "Content", !self.selected_files.is_empty());
             ui.add_space(8.0);
-            ui.label(RichText::new("------").color(BORDER));
+            ui.label(RichText::new("------").color(border_color()));
             ui.add_space(8.0);
             step_badge(ui, "2", "License", true);
             ui.add_space(8.0);
-            ui.label(RichText::new("------").color(BORDER));
+            ui.label(RichText::new("------").color(border_color()));
             ui.add_space(8.0);
             step_badge(ui, "3", "Create", false);
         });
         ui.add_space(14.0);
         ui.columns(2, |cols| {
-            egui::Frame::new().fill(PANEL).stroke(Stroke::new(1.0, BORDER)).corner_radius(egui::CornerRadius::same(12)).inner_margin(16)
+            egui::Frame::new().fill(panel_bg()).stroke(Stroke::new(1.0, border_color())).corner_radius(egui::CornerRadius::same(12)).inner_margin(16)
                 .show(&mut cols[0], |ui| {
                     ui.heading(RichText::new("Content Files").size(17.0).strong().color(TEXT));
                     ui.label(RichText::new("Privora protects the original bytes; it does not change or recompress your files.").size(13.0).color(MUTED));
                     ui.add_space(10.0);
-                    let frame = egui::Frame::new().fill(Color32::from_rgb(13, 18, 35)).stroke(Stroke::new(1.0, Color32::from_rgb(70, 60, 107)))
+                    let frame = egui::Frame::new().fill(surface_bg()).stroke(Stroke::new(1.0, Color32::from_rgb(70, 60, 107)))
                         .corner_radius(egui::CornerRadius::same(10)).inner_margin(16);
                     frame.show(ui, |ui| {
                         ui.vertical_centered(|ui| {
-                            icon_widget(ui, AppIcon::Upload, 34.0, PURPLE_LIGHT);
+                            icon_widget(ui, AppIcon::Upload, 34.0, accent_soft());
                             ui.label(RichText::new("Select or drop files to protect").size(14.0).strong().color(TEXT));
                             ui.label(RichText::new("Text · Image · Audio · Video · Other files").size(12.5).color(MUTED));
                             ui.add_space(8.0);
@@ -559,9 +747,9 @@ impl PrivoraApp {
                     let mut remove_index = None;
                     egui::ScrollArea::vertical().max_height(180.0).show(ui, |ui| {
                         for (index, path) in self.selected_files.iter().enumerate() {
-                            egui::Frame::new().fill(PANEL_2).corner_radius(egui::CornerRadius::same(7)).inner_margin(8).show(ui, |ui| {
+                            egui::Frame::new().fill(panel_raised()).corner_radius(egui::CornerRadius::same(7)).inner_margin(8).show(ui, |ui| {
                                 ui.horizontal(|ui| {
-                                    icon_widget(ui, file_icon(path), 22.0, PURPLE_LIGHT);
+                                    icon_widget(ui, file_icon(path), 22.0, accent_soft());
                                     ui.vertical(|ui| {
                                         ui.label(RichText::new(path.file_name().and_then(|s| s.to_str()).unwrap_or("Unnamed file")).size(13.0).color(TEXT));
                                         let size = fs::metadata(path).map(|m| human_size(m.len())).unwrap_or_else(|_| "Unavailable".into());
@@ -577,7 +765,7 @@ impl PrivoraApp {
                     });
                     if let Some(index) = remove_index { self.selected_files.remove(index); }
                 });
-            egui::Frame::new().fill(PANEL).stroke(Stroke::new(1.0, BORDER)).corner_radius(egui::CornerRadius::same(12)).inner_margin(16)
+            egui::Frame::new().fill(panel_bg()).stroke(Stroke::new(1.0, border_color())).corner_radius(egui::CornerRadius::same(12)).inner_margin(16)
                 .show(&mut cols[1], |ui| {
                     ui.heading(RichText::new("Package Settings").size(17.0).strong().color(TEXT));
                     ui.label(RichText::new("Set a package name and optional access rules. Privora generates a random access code for you.").size(13.0).color(MUTED));
@@ -610,12 +798,12 @@ impl PrivoraApp {
                     ui.add_sized([ui.available_width(), 35.0], egui::TextEdit::singleline(&mut self.max_activations).hint_text("3"));
                     ui.add_space(12.0);
                     egui::Frame::new().fill(Color32::from_rgb(38, 28, 51)).corner_radius(egui::CornerRadius::same(8)).inner_margin(10).show(ui, |ui| {
-                        ui.label(RichText::new("Offline limitation").size(13.0).strong().color(PURPLE_LIGHT));
+                        ui.label(RichText::new("Offline limitation").size(13.0).strong().color(accent_soft()));
                         ui.label(RichText::new("Offline limit: this counter lives on this app installation. It cannot count people globally across different computers.").size(12.5).color(MUTED));
                     });
                     ui.add_space(15.0);
                     if self.busy {
-                        ui.horizontal(|ui| { ui.spinner(); ui.label(RichText::new("Creating encrypted package...").color(PURPLE_LIGHT)); });
+                        ui.horizontal(|ui| { ui.spinner(); ui.label(RichText::new("Creating encrypted package...").color(accent_soft())); });
                     } else if primary_button(ui, "Create encrypted .vora").clicked() {
                         self.begin_create();
                     }
@@ -753,7 +941,7 @@ impl PrivoraApp {
             .corner_radius(egui::CornerRadius::same(10))
             .inner_margin(12)
             .show(ui, |ui| {
-                ui.label(RichText::new("Offline policy notice").strong().color(PURPLE_LIGHT));
+                ui.label(RichText::new("Offline policy notice").strong().color(accent_soft()));
                 ui.label(RichText::new("Dates and unlock counts are checked on this device. Offline policies cannot enforce one shared person/device count or remotely revoke a copied package.").size(13.0).color(MUTED));
             });
         ui.add_space(12.0);
@@ -840,15 +1028,20 @@ impl PrivoraApp {
                     .and_then(|d| NaiveDate::parse_from_str(d, "%Y-%m-%d").ok())
                     .is_some_and(|d| today < d);
                 let limit_reached = current_count >= manifest.max_activations;
+                let path_label = if self.state.preferences.show_full_paths {
+                    record.path.clone()
+                } else {
+                    shorten_path(&record.path, 54)
+                };
 
                 egui::Frame::new()
-                    .fill(PANEL)
-                    .stroke(Stroke::new(1.0, BORDER))
+                    .fill(panel_bg())
+                    .stroke(Stroke::new(1.0, border_color()))
                     .corner_radius(egui::CornerRadius::same(11))
                     .inner_margin(14)
                     .show(ui, |ui| {
                         ui.horizontal(|ui| {
-                            icon_widget(ui, AppIcon::Package, 24.0, PURPLE_LIGHT);
+                            icon_widget(ui, AppIcon::Package, 24.0, accent_soft());
                             ui.vertical(|ui| {
                                 ui.label(
                                     RichText::new(&manifest.name)
@@ -859,8 +1052,7 @@ impl PrivoraApp {
                                 ui.label(
                                     RichText::new(format!(
                                         "{} file(s) · {}",
-                                        manifest.file_count,
-                                        shorten_path(&record.path, 54)
+                                        manifest.file_count, path_label
                                     ))
                                     .size(11.5)
                                     .color(MUTED),
@@ -870,7 +1062,7 @@ impl PrivoraApp {
                                 let (label, color) = if expired {
                                     ("EXPIRED", RED)
                                 } else if scheduled {
-                                    ("SCHEDULED", PURPLE_LIGHT)
+                                    ("SCHEDULED", accent_soft())
                                 } else if limit_reached {
                                     ("LOCAL LIMIT REACHED", RED)
                                 } else {
@@ -917,13 +1109,44 @@ impl PrivoraApp {
     fn draw_files(&mut self, ui: &mut egui::Ui) {
         page_header(
             ui,
-            "Import & Unlock",
-            "Unlock an encrypted .vora package using its access code, then choose where to extract its files.",
+            "Open a protected package",
+            "Verify the access code and extract your files to a folder you control.",
         );
+        let mut approve_unlock = false;
+        let mut cancel_unlock = false;
+        if self.confirm_unlock_pending {
+            egui::Frame::new()
+                .fill(Color32::from_rgb(28, 24, 45))
+                .stroke(Stroke::new(1.0, accent_soft()))
+                .corner_radius(egui::CornerRadius::same(14))
+                .inner_margin(16)
+                .show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        icon_widget(ui, AppIcon::Shield, 25.0, accent_soft());
+                        ui.vertical(|ui| {
+                            ui.label(RichText::new("Confirm extraction").size(16.0).strong().color(TEXT));
+                            ui.label(RichText::new("Privora will decrypt this package and write plaintext files to the selected folder.").size(13.0).color(MUTED));
+                        });
+                    });
+                    ui.add_space(10.0);
+                    ui.horizontal(|ui| {
+                        if primary_button(ui, "Continue and extract").clicked() { approve_unlock = true; }
+                        if ui.button("Cancel").clicked() { cancel_unlock = true; }
+                    });
+                });
+            ui.add_space(10.0);
+        }
+        if cancel_unlock {
+            self.confirm_unlock_pending = false;
+        }
+        if approve_unlock {
+            self.confirm_unlock_pending = false;
+            self.begin_unlock();
+        }
         ui.columns(2, |cols| {
-            egui::Frame::new().fill(PANEL).stroke(Stroke::new(1.0, BORDER)).corner_radius(egui::CornerRadius::same(12)).inner_margin(16).show(&mut cols[0], |ui| {
+            egui::Frame::new().fill(panel_bg()).stroke(Stroke::new(1.0, border_color())).corner_radius(egui::CornerRadius::same(12)).inner_margin(16).show(&mut cols[0], |ui| {
                 ui.vertical_centered(|ui| {
-                    icon_widget(ui, AppIcon::Folder, 42.0, PURPLE_LIGHT);
+                    icon_widget(ui, AppIcon::Folder, 42.0, accent_soft());
                     ui.heading(RichText::new("Import .vora File").size(18.0).strong().color(TEXT));
                     ui.label(RichText::new("Choose the package you received.").size(13.0).color(MUTED));
                     ui.add_space(8.0);
@@ -961,7 +1184,7 @@ impl PrivoraApp {
                             metadata_chip(ui, "Access code", "Required");
                         });
                         ui.add_space(8.0);
-                        egui::Frame::new().fill(Color32::from_rgb(13, 18, 35)).corner_radius(egui::CornerRadius::same(8)).inner_margin(10).show(ui, |ui| {
+                        egui::Frame::new().fill(surface_bg()).corner_radius(egui::CornerRadius::same(8)).inner_margin(10).show(ui, |ui| {
                             let message = if info.metadata_encrypted {
                                 "Package details are hidden. After code verification, Privora checks the expiry and unlock policy."
                             } else {
@@ -972,9 +1195,9 @@ impl PrivoraApp {
                     }
                 }
             });
-            egui::Frame::new().fill(PANEL).stroke(Stroke::new(1.0, BORDER)).corner_radius(egui::CornerRadius::same(12)).inner_margin(16).show(&mut cols[1], |ui| {
+            egui::Frame::new().fill(panel_bg()).stroke(Stroke::new(1.0, border_color())).corner_radius(egui::CornerRadius::same(12)).inner_margin(16).show(&mut cols[1], |ui| {
                 ui.vertical_centered(|ui| {
-                    icon_widget(ui, AppIcon::Shield, 38.0, PURPLE_LIGHT);
+                    icon_widget(ui, AppIcon::Shield, 38.0, accent_soft());
                     ui.heading(RichText::new("License Access").size(18.0).strong().color(TEXT));
                     ui.label(RichText::new("Enter the secret code that was shared with you separately.").size(13.0).color(MUTED));
                 });
@@ -1002,16 +1225,24 @@ impl PrivoraApp {
                     if ui.button("Choose...").clicked() {
                         if let Some(path) = rfd::FileDialog::new().set_title("Choose extraction root folder").pick_folder() {
                             self.export_folder = path.to_string_lossy().to_string();
-                            self.state.export_folder = self.export_folder.clone();
+                            if self.state.preferences.remember_export_folder {
+                                self.state.export_folder = self.export_folder.clone();
+                            } else {
+                                self.state.export_folder.clear();
+                            }
                             let _ = self.state.save();
                         }
                     }
                 });
                 ui.add_space(14.0);
                 if self.busy {
-                    ui.horizontal(|ui| { ui.spinner(); ui.label(RichText::new("Verifying and decrypting...").color(PURPLE_LIGHT)); });
+                    ui.horizontal(|ui| { ui.spinner(); ui.label(RichText::new("Verifying and decrypting...").color(accent_soft())); });
                 } else if primary_button(ui, "Verify code and extract").clicked() {
-                    self.begin_unlock();
+                    if self.state.preferences.confirm_before_unlock {
+                        self.confirm_unlock_pending = true;
+                    } else {
+                        self.begin_unlock();
+                    }
                 }
                 if self.selected_package.is_none() {
                     ui.label(RichText::new("Import a .vora package first.").size(12.5).color(MUTED));
@@ -1035,9 +1266,18 @@ impl PrivoraApp {
             );
         } else {
             for item in self.state.unlocked.iter().take(4) {
+                let output_label = if self.state.preferences.show_full_paths {
+                    item.output_dir.clone()
+                } else {
+                    Path::new(&item.output_dir)
+                        .file_name()
+                        .and_then(|name| name.to_str())
+                        .unwrap_or("Output folder")
+                        .to_owned()
+                };
                 egui::Frame::new()
-                    .fill(PANEL)
-                    .stroke(Stroke::new(1.0, BORDER))
+                    .fill(panel_bg())
+                    .stroke(Stroke::new(1.0, border_color()))
                     .corner_radius(egui::CornerRadius::same(8))
                     .inner_margin(10)
                     .show(ui, |ui| {
@@ -1048,7 +1288,7 @@ impl PrivoraApp {
                                 ui.label(
                                     RichText::new(format!(
                                         "{} file(s) · {}",
-                                        item.file_count, item.output_dir
+                                        item.file_count, output_label
                                     ))
                                     .size(11.5)
                                     .color(MUTED),
@@ -1105,59 +1345,230 @@ impl PrivoraApp {
     }
 
     fn draw_settings(&mut self, ui: &mut egui::Ui) {
-        page_header(ui, "Settings", "Local storage and offline behavior.");
-        egui::Frame::new()
-            .fill(PANEL)
-            .stroke(Stroke::new(1.0, BORDER))
-            .corner_radius(egui::CornerRadius::same(12))
-            .inner_margin(18)
-            .show(ui, |ui| {
-                ui.heading(
-                    RichText::new("Default extraction location")
-                        .size(16.0)
-                        .strong()
-                        .color(TEXT),
-                );
-                ui.label(
-                    RichText::new("Used when importing and unlocking a package.")
-                        .size(13.0)
-                        .color(MUTED),
-                );
-                ui.add_space(8.0);
-                ui.horizontal(|ui| {
-                    ui.add_sized(
-                        [ui.available_width() - 100.0, 34.0],
-                        egui::TextEdit::singleline(&mut self.export_folder),
-                    );
-                    if ui.button("Browse...").clicked() {
-                        if let Some(path) = rfd::FileDialog::new()
-                            .set_title("Choose default extraction folder")
-                            .pick_folder()
-                        {
-                            self.export_folder = path.to_string_lossy().to_string();
-                        }
+        page_header(
+            ui,
+            "Make Privora yours",
+            "Personalize the workspace, choose safer defaults, and control what this device remembers.",
+        );
+
+        let preferences_before = self.state.preferences.clone();
+        let mut save_clicked = false;
+        let mut reset_clicked = false;
+        let mut clear_activity_clicked = false;
+
+        ui.columns(2, |cols| {
+            settings_card(
+                &mut cols[0],
+                "Appearance & feel",
+                "A quieter, more personal workspace.",
+                |ui| {
+                    ui.horizontal(|ui| {
+                        ui.vertical(|ui| {
+                            ui.label(RichText::new("Appearance").strong().color(TEXT));
+                            ui.label(RichText::new("Choose the depth of the dark canvas.").size(12.0).color(MUTED));
+                        });
+                        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                            egui::ComboBox::from_id_salt("pref-appearance")
+                                .selected_text(self.state.preferences.appearance.clone())
+                                .width(130.0)
+                                .show_ui(ui, |ui| {
+                                    ui.selectable_value(&mut self.state.preferences.appearance, "Midnight".to_owned(), "Midnight");
+                                    ui.selectable_value(&mut self.state.preferences.appearance, "OLED Black".to_owned(), "OLED Black");
+                                });
+                        });
+                    });
+                    ui.add_space(12.0);
+                    ui.horizontal(|ui| {
+                        ui.vertical(|ui| {
+                            ui.label(RichText::new("Accent color").strong().color(TEXT));
+                            ui.label(RichText::new("Used for focus, buttons and navigation.").size(12.0).color(MUTED));
+                        });
+                        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                            egui::ComboBox::from_id_salt("pref-accent")
+                                .selected_text(self.state.preferences.accent.clone())
+                                .width(130.0)
+                                .show_ui(ui, |ui| {
+                                    ui.selectable_value(&mut self.state.preferences.accent, "Violet".to_owned(), "Violet");
+                                    ui.selectable_value(&mut self.state.preferences.accent, "Blue".to_owned(), "Ocean blue");
+                                    ui.selectable_value(&mut self.state.preferences.accent, "Mint".to_owned(), "Mint");
+                                    ui.selectable_value(&mut self.state.preferences.accent, "Rose".to_owned(), "Rose");
+                                });
+                        });
+                    });
+                    ui.add_space(14.0);
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new("Interface scale").strong().color(TEXT));
+                        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                            ui.label(RichText::new(format!("{:.0}%", self.state.preferences.ui_scale * 100.0)).color(accent_soft()).strong());
+                        });
+                    });
+                    ui.add(egui::Slider::new(&mut self.state.preferences.ui_scale, 0.85..=1.30).show_value(false));
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new("Smaller").size(11.5).color(MUTED));
+                        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                            ui.label(RichText::new("Larger").size(11.5).color(MUTED));
+                        });
+                    });
+                    ui.add_space(10.0);
+                    ui.checkbox(&mut self.state.preferences.compact_mode, "Compact spacing");
+                    ui.label(RichText::new("Fit more information on screen by reducing gaps and control padding.").size(12.0).color(MUTED));
+                    ui.add_space(6.0);
+                    ui.checkbox(&mut self.state.preferences.animations_enabled, "Smooth interface animations");
+                    ui.label(RichText::new("Turn off motion if you prefer a steadier interface or need to reduce visual movement.").size(12.0).color(MUTED));
+                },
+            );
+
+            cols[0].add_space(12.0);
+            settings_card(
+                &mut cols[0],
+                "Privacy & activity",
+                "Choose what Privora keeps on this device.",
+                |ui| {
+                    ui.checkbox(&mut self.state.preferences.keep_unlock_history, "Keep recent unlock activity");
+                    ui.label(RichText::new("When disabled, successful extraction paths and activity entries are not added to the recent-activity list. The local policy counter remains separate.").size(12.0).color(MUTED));
+                    ui.add_space(10.0);
+                    ui.checkbox(&mut self.state.preferences.show_full_paths, "Show full paths in history");
+                    ui.label(RichText::new("When off, history shows shortened paths or folder names to reduce accidental exposure while screen-sharing.").size(12.0).color(MUTED));
+                    ui.add_space(10.0);
+                    if ui.button("Clear recent activity…").clicked() {
+                        clear_activity_clicked = true;
                     }
+                    ui.label(RichText::new("This clears the visible activity list only. It does not reset package unlock counters.").size(12.0).color(MUTED));
+                },
+            );
+
+            settings_card(
+                &mut cols[1],
+                "File workflow",
+                "Set defaults for opening and extracting packages.",
+                |ui| {
+                    ui.checkbox(&mut self.state.preferences.confirm_before_unlock, "Confirm before decrypting files");
+                    ui.label(RichText::new("Show a confirmation step before plaintext files are written to disk.").size(12.0).color(MUTED));
+                    ui.add_space(8.0);
+                    ui.checkbox(&mut self.state.preferences.clear_access_code_after_unlock, "Clear the access code after success");
+                    ui.label(RichText::new("Recommended on shared or presentation devices.").size(12.0).color(MUTED));
+                    ui.add_space(8.0);
+                    ui.checkbox(&mut self.state.preferences.remember_export_folder, "Remember extraction location");
+                    ui.label(RichText::new("Turn off to avoid persisting the selected output path in local app state.").size(12.0).color(MUTED));
+                    ui.add_space(14.0);
+                    ui.label(RichText::new("Default extraction folder").strong().color(TEXT));
+                    ui.add_sized(
+                        [ui.available_width(), 36.0],
+                        egui::TextEdit::singleline(&mut self.export_folder).hint_text("Choose a folder for unlocked files"),
+                    );
+                    ui.horizontal(|ui| {
+                        if ui.button("Choose folder…").clicked() {
+                            if let Some(path) = rfd::FileDialog::new()
+                                .set_title("Choose default extraction folder")
+                                .pick_folder()
+                            {
+                                self.export_folder = path.to_string_lossy().to_string();
+                            }
+                        }
+                        ui.label(RichText::new("Local setting").size(11.5).color(MUTED));
+                    });
+                },
+            );
+
+            cols[1].add_space(12.0);
+            settings_card(
+                &mut cols[1],
+                "Local data & security",
+                "Transparency about offline behavior.",
+                |ui| {
+                    ui.label(RichText::new("Application data location").strong().color(TEXT));
+                    ui.add(egui::Label::new(RichText::new(state_file_path().display().to_string()).size(11.5).color(MUTED)).selectable(true));
+                    ui.add_space(8.0);
+                    ui.label(RichText::new("Access codes are not stored in this settings file. Package metadata and activity may be stored locally; keep your Windows account protected if other people use this device.").size(12.0).color(MUTED));
+                    ui.add_space(10.0);
+                    egui::CollapsingHeader::new("Read offline security limitations")
+                        .default_open(false)
+                        .show(ui, |ui| {
+                            ui.label(RichText::new(
+                                "• Unlock counters are per local app profile, not a global person/device limit.\n• Expiration depends on the system clock and is not resistant to clock rollback.\n• Packaging and extraction use temporary plaintext ZIP data; secure erasure is not guaranteed.\n• After extraction, Privora cannot control copying or recording of plaintext files.\n• Anyone who has both a .vora file and its access code can decrypt it.\n• This alpha has not received an independent security audit.",
+                            ).size(12.0).color(MUTED));
+                        });
+                },
+            );
+        });
+
+        if preferences_before != self.state.preferences {
+            apply_visual_preferences(ui.ctx(), &self.state.preferences);
+        }
+
+        ui.add_space(16.0);
+        egui::Frame::new()
+            .fill(panel_bg())
+            .stroke(Stroke::new(1.0, border_color()))
+            .corner_radius(egui::CornerRadius::same(14))
+            .inner_margin(16)
+            .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    ui.vertical(|ui| {
+                        ui.label(
+                            RichText::new("Preferences are previewed immediately")
+                                .strong()
+                                .color(TEXT),
+                        );
+                        ui.label(
+                            RichText::new("Save to keep them for your next session.")
+                                .size(12.5)
+                                .color(MUTED),
+                        );
+                    });
+                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                        if primary_button(ui, "Save preferences").clicked() {
+                            save_clicked = true;
+                        }
+                        if ui.button("Restore defaults").clicked() {
+                            reset_clicked = true;
+                        }
+                    });
                 });
-                ui.add_space(8.0);
-                if primary_button(ui, "Save Settings").clicked() {
-                    self.state.export_folder = self.export_folder.clone();
-                    match self.state.save() {
-                        Ok(()) => self.status = Some((true, "Settings saved locally.".into())),
-                        Err(e) => self.status = Some((false, e)),
+            });
+
+        if reset_clicked {
+            self.state.preferences = AppPreferences::default();
+            let default_export = dirs::download_dir()
+                .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| std::env::temp_dir()))
+                .join("Privora-Unlocked")
+                .to_string_lossy()
+                .to_string();
+            self.export_folder = default_export.clone();
+            self.state.export_folder = if self.state.preferences.remember_export_folder {
+                default_export
+            } else {
+                String::new()
+            };
+            apply_visual_preferences(ui.ctx(), &self.state.preferences);
+            save_clicked = true;
+            self.status = Some((true, "Preferences restored to defaults.".into()));
+        }
+        if clear_activity_clicked {
+            self.state.unlocked.clear();
+            save_clicked = true;
+            self.status = Some((
+                true,
+                "Recent activity cleared. Local unlock counters were preserved.".into(),
+            ));
+        }
+        if save_clicked {
+            if self.state.preferences.remember_export_folder {
+                self.state.export_folder = self.export_folder.clone();
+            } else {
+                self.state.export_folder.clear();
+            }
+            match self.state.save() {
+                Ok(()) => {
+                    if self.status.is_none() || reset_clicked {
+                        self.status = Some((true, "Preferences saved on this device.".into()));
                     }
                 }
-            });
-        ui.add_space(12.0);
-        egui::Frame::new().fill(PANEL).stroke(Stroke::new(1.0, BORDER)).corner_radius(egui::CornerRadius::same(12)).inner_margin(18).show(ui, |ui| {
-            ui.heading(RichText::new("Local app data").size(16.0).strong().color(TEXT));
-            ui.label(RichText::new(state_file_path().display().to_string()).size(12.5).color(MUTED));
-            ui.label(RichText::new("This JSON stores package history, recipient labels and local counters. Secret access codes and private license-note text are not stored here.").size(13.0).color(MUTED));
-        });
-        ui.add_space(12.0);
-        egui::Frame::new().fill(Color32::from_rgb(40, 23, 38)).stroke(Stroke::new(1.0, Color32::from_rgb(105, 48, 68))).corner_radius(egui::CornerRadius::same(12)).inner_margin(18).show(ui, |ui| {
-            ui.heading(RichText::new("Security boundaries in this offline alpha").size(16.0).strong().color(RED));
-            ui.label(RichText::new("• Unlock limits are per local app profile, not a global people/device limit.\n• Expiration depends on the system clock and is not resistant to clock rollback.\n• Creating and unlocking uses temporary plaintext ZIP files; secure erasure is not guaranteed.\n• Some creator-side metadata is stored as local JSON; the private license-note text is not copied there. Metadata inside the .vora v2 file is encrypted.\n• Once files are extracted as plaintext, Privora cannot control their later copying.\n• Anyone with both a .vora package and its access code can decrypt it.\n• Do not use this alpha for highly sensitive material before independent security review.").size(13.0).color(MUTED));
-        });
+                Err(error) => {
+                    self.status = Some((false, format!("Could not save preferences: {error}")))
+                }
+            }
+        }
     }
 }
 
@@ -1181,18 +1592,18 @@ impl eframe::App for PrivoraApp {
         }
         let full_size = ui.available_size();
         egui::Frame::new()
-            .fill(BG)
+            .fill(surface_bg())
             .inner_margin(egui::Margin::same(0))
             .show(ui, |ui| {
                 ui.set_min_size(full_size);
                 ui.horizontal(|ui| {
                     ui.allocate_ui_with_layout(
-                        Vec2::new(218.0, full_size.y),
+                        Vec2::new(244.0, full_size.y),
                         Layout::top_down(Align::Min),
                         |ui| {
                             egui::Frame::new()
-                                .fill(SIDEBAR)
-                                .inner_margin(egui::Margin::same(16))
+                                .fill(sidebar_bg())
+                                .inner_margin(egui::Margin::symmetric(18, 16))
                                 .show(ui, |ui| self.draw_sidebar(ui));
                         },
                     );
@@ -1200,9 +1611,15 @@ impl eframe::App for PrivoraApp {
                         let main_size = ui.available_size();
                         ui.set_min_size(main_size);
                         egui::Frame::new()
-                            .fill(Color32::from_rgb(10, 13, 27))
-                            .inner_margin(egui::Margin::symmetric(20, 12))
-                            .stroke(Stroke::new(1.0, BORDER))
+                            .fill(Color32::from_rgba_unmultiplied(
+                                panel_bg().r(),
+                                panel_bg().g(),
+                                panel_bg().b(),
+                                242,
+                            ))
+                            .inner_margin(egui::Margin::symmetric(28, 20))
+                            .stroke(Stroke::new(1.0, border_color()))
+                            .corner_radius(egui::CornerRadius::same(18))
                             .show(ui, |ui| {
                                 ui.horizontal(|ui| {
                                     let section = match self.page {
@@ -1212,13 +1629,11 @@ impl eframe::App for PrivoraApp {
                                         Page::Files => "Open package",
                                         Page::Settings => "Settings",
                                     };
+                                    icon_widget(ui, AppIcon::Shield, 15.0, accent_soft());
                                     ui.label(
-                                        RichText::new("PRIVORA")
-                                            .size(12.5)
-                                            .strong()
-                                            .color(PURPLE_LIGHT),
+                                        RichText::new("Privora").size(12.5).strong().color(TEXT),
                                     );
-                                    ui.label(RichText::new("/  ").size(12.0).color(BORDER));
+                                    ui.label(RichText::new("·").size(13.0).color(border_color()));
                                     ui.label(
                                         RichText::new(section).size(13.0).strong().color(TEXT),
                                     );
@@ -1228,7 +1643,7 @@ impl eframe::App for PrivoraApp {
                                             ui.label(
                                                 RichText::new("Processing locally...")
                                                     .size(12.5)
-                                                    .color(PURPLE_LIGHT),
+                                                    .color(accent_soft()),
                                             );
                                         } else {
                                             egui::Frame::new()
@@ -1266,7 +1681,7 @@ impl eframe::App for PrivoraApp {
                                     });
                                 });
                             });
-                        ui.add_space(12.0);
+                        ui.add_space(18.0);
                         if let Some((success, message)) = self.status.clone() {
                             let color = if success { GREEN } else { RED };
                             egui::Frame::new()
@@ -1305,12 +1720,15 @@ impl eframe::App for PrivoraApp {
                         }
                         egui::ScrollArea::vertical()
                             .auto_shrink([false, false])
-                            .show(ui, |ui| match self.page {
-                                Page::Home => self.draw_home(ui),
-                                Page::Create => self.draw_create(ui),
-                                Page::Licenses => self.draw_licenses(ui),
-                                Page::Files => self.draw_files(ui),
-                                Page::Settings => self.draw_settings(ui),
+                            .show(ui, |ui| {
+                                ui.add_space(4.0);
+                                match self.page {
+                                    Page::Home => self.draw_home(ui),
+                                    Page::Create => self.draw_create(ui),
+                                    Page::Licenses => self.draw_licenses(ui),
+                                    Page::Files => self.draw_files(ui),
+                                    Page::Settings => self.draw_settings(ui),
+                                }
                             });
                     });
                 });
@@ -1399,41 +1817,75 @@ fn configure_fonts(ctx: &egui::Context) {
     ctx.set_style_of(egui::Theme::Dark, style);
 }
 
-fn nav_button(ui: &mut egui::Ui, selected: bool, icon: AppIcon, label: &str) -> bool {
+fn nav_button(
+    ui: &mut egui::Ui,
+    selected: bool,
+    icon: AppIcon,
+    label: &str,
+    animations_enabled: bool,
+    compact_mode: bool,
+) -> bool {
     let width = ui.available_width();
-    let (rect, response) = ui.allocate_exact_size(Vec2::new(width, 42.0), egui::Sense::click());
-    let fill = if selected {
-        Color32::from_rgb(58, 36, 91)
-    } else if response.hovered() {
-        Color32::from_rgb(27, 31, 55)
+    let height = if compact_mode { 38.0 } else { 44.0 };
+    let (rect, response) = ui.allocate_exact_size(Vec2::new(width, height), egui::Sense::click());
+    let active_progress = if animations_enabled {
+        ui.ctx().animate_bool(response.id.with("active"), selected)
+    } else if selected {
+        1.0
     } else {
-        SIDEBAR
+        0.0
+    };
+    let hover_progress = if animations_enabled {
+        ui.ctx()
+            .animate_bool(response.id.with("hover"), response.hovered())
+    } else if response.hovered() {
+        1.0
+    } else {
+        0.0
+    };
+
+    let fill = if selected {
+        Color32::from_rgba_unmultiplied(
+            accent_main().r(),
+            accent_main().g(),
+            accent_main().b(),
+            (32.0 + 18.0 * active_progress) as u8,
+        )
+    } else if response.hovered() {
+        Color32::from_rgba_unmultiplied(255, 255, 255, (9.0 * hover_progress) as u8)
+    } else {
+        sidebar_bg()
     };
     ui.painter()
-        .rect_filled(rect, egui::CornerRadius::same(9), fill);
-    if selected {
-        let border = Stroke::new(1.0, Color32::from_rgb(104, 66, 159));
-        let a = rect.left_top();
-        let b = rect.right_top();
-        let c = rect.right_bottom();
-        let d = rect.left_bottom();
-        ui.painter().line_segment([a, b], border);
-        ui.painter().line_segment([b, c], border);
-        ui.painter().line_segment([c, d], border);
-        ui.painter().line_segment([d, a], border);
+        .rect_filled(rect, egui::CornerRadius::same(12), fill);
+
+    if active_progress > 0.01 {
+        let bar_height = height - 18.0;
+        let bar_width = 2.0 + 2.0 * active_progress;
+        let bar = egui::Rect::from_min_size(
+            rect.min + egui::vec2(0.0, 9.0),
+            Vec2::new(bar_width, bar_height),
+        );
+        ui.painter()
+            .rect_filled(bar, egui::CornerRadius::same(3), accent_main());
     }
-    let icon_rect = egui::Rect::from_min_size(rect.min + egui::vec2(13.0, 12.0), Vec2::splat(18.0));
+
+    let icon_size = if compact_mode { 17.0 } else { 19.0 };
+    let icon_rect = egui::Rect::from_min_size(
+        rect.min + egui::vec2(15.0, (height - icon_size) / 2.0),
+        Vec2::splat(icon_size),
+    );
     paint_icon(
         ui.painter(),
         icon_rect,
         icon,
-        if selected { PURPLE_LIGHT } else { MUTED },
+        if selected { accent_soft() } else { MUTED },
     );
     ui.painter().text(
-        rect.min + egui::vec2(45.0, rect.height() / 2.0),
+        rect.min + egui::vec2(48.0, rect.height() / 2.0),
         egui::Align2::LEFT_CENTER,
         label,
-        FontId::proportional(14.0),
+        FontId::proportional(if compact_mode { 13.0 } else { 14.0 }),
         if selected { TEXT } else { MUTED },
     );
     response.clicked()
@@ -1443,7 +1895,7 @@ fn icon_button(ui: &mut egui::Ui, icon: AppIcon, size: f32, color: Color32) -> e
     let (rect, response) = ui.allocate_exact_size(Vec2::splat(size), egui::Sense::click());
     if response.hovered() {
         ui.painter()
-            .rect_filled(rect, egui::CornerRadius::same(5), PANEL_2);
+            .rect_filled(rect, egui::CornerRadius::same(5), panel_raised());
     }
     let pad = size * 0.22;
     let icon_rect = rect.shrink(pad);
@@ -1614,6 +2066,27 @@ fn paint_icon(painter: &egui::Painter, rect: egui::Rect, icon: AppIcon, color: C
     }
 }
 
+fn settings_card(
+    ui: &mut egui::Ui,
+    title: &str,
+    subtitle: &str,
+    add_contents: impl FnOnce(&mut egui::Ui),
+) {
+    egui::Frame::new()
+        .fill(panel_bg())
+        .stroke(Stroke::new(1.0, border_color()))
+        .corner_radius(egui::CornerRadius::same(16))
+        .inner_margin(egui::Margin::symmetric(18, 16))
+        .show(ui, |ui| {
+            ui.label(RichText::new(title).size(17.0).strong().color(TEXT));
+            ui.label(RichText::new(subtitle).size(12.5).color(MUTED));
+            ui.add_space(12.0);
+            ui.separator();
+            ui.add_space(10.0);
+            add_contents(ui);
+        });
+}
+
 fn primary_button(ui: &mut egui::Ui, label: &str) -> egui::Response {
     ui.add(
         egui::Button::new(
@@ -1622,22 +2095,27 @@ fn primary_button(ui: &mut egui::Ui, label: &str) -> egui::Response {
                 .strong()
                 .color(Color32::WHITE),
         )
-        .fill(PURPLE)
-        .stroke(Stroke::new(1.0, PURPLE_LIGHT)),
+        .fill(accent_main())
+        .stroke(Stroke::new(1.0, accent_soft())),
     )
 }
 
 fn page_header(ui: &mut egui::Ui, title: &str, subtitle: &str) {
-    ui.add_space(4.0);
-    ui.heading(RichText::new(title).size(27.0).strong().color(TEXT));
+    ui.add_space(6.0);
+    ui.heading(RichText::new(title).size(30.0).strong().color(TEXT));
+    ui.add_space(2.0);
     ui.label(RichText::new(subtitle).size(14.0).color(MUTED));
-    ui.add_space(16.0);
+    ui.add_space(9.0);
+    let (rect, _) = ui.allocate_exact_size(Vec2::new(34.0, 3.0), egui::Sense::hover());
+    ui.painter()
+        .rect_filled(rect, egui::CornerRadius::same(2), accent_main());
+    ui.add_space(14.0);
 }
 
 fn stat_card(ui: &mut egui::Ui, title: &str, value: String, sub: &str) {
     egui::Frame::new()
-        .fill(PANEL)
-        .stroke(Stroke::new(1.0, BORDER))
+        .fill(panel_bg())
+        .stroke(Stroke::new(1.0, border_color()))
         .corner_radius(egui::CornerRadius::same(11))
         .inner_margin(15)
         .show(ui, |ui| {
@@ -1650,28 +2128,28 @@ fn stat_card(ui: &mut egui::Ui, title: &str, value: String, sub: &str) {
 
 fn empty_panel(ui: &mut egui::Ui, title: &str, subtitle: &str) {
     egui::Frame::new()
-        .fill(PANEL)
-        .stroke(Stroke::new(1.0, BORDER))
+        .fill(panel_bg())
+        .stroke(Stroke::new(1.0, border_color()))
         .corner_radius(egui::CornerRadius::same(10))
         .inner_margin(20)
         .show(ui, |ui| {
             ui.vertical_centered(|ui| {
-                icon_widget(ui, AppIcon::Shield, 26.0, PURPLE_LIGHT);
+                icon_widget(ui, AppIcon::Shield, 26.0, accent_soft());
                 ui.label(RichText::new(title).size(15.0).strong().color(TEXT));
                 ui.label(RichText::new(subtitle).size(13.0).color(MUTED));
             });
         });
 }
 
-fn package_row(ui: &mut egui::Ui, manifest: &Manifest, path: &str) {
+fn package_row(ui: &mut egui::Ui, manifest: &Manifest, path: &str, show_full_path: bool) {
     egui::Frame::new()
-        .fill(PANEL)
-        .stroke(Stroke::new(1.0, BORDER))
+        .fill(panel_bg())
+        .stroke(Stroke::new(1.0, border_color()))
         .corner_radius(egui::CornerRadius::same(8))
         .inner_margin(10)
         .show(ui, |ui| {
             ui.horizontal(|ui| {
-                icon_widget(ui, AppIcon::Package, 22.0, PURPLE_LIGHT);
+                icon_widget(ui, AppIcon::Package, 22.0, accent_soft());
                 ui.vertical(|ui| {
                     ui.label(
                         RichText::new(&manifest.name)
@@ -1698,24 +2176,35 @@ fn package_row(ui: &mut egui::Ui, manifest: &Manifest, path: &str) {
                     ui.label(RichText::new("ENCRYPTED").size(10.5).strong().color(GREEN));
                 });
             });
-            ui.label(
-                RichText::new(path)
-                    .size(10.5)
-                    .color(Color32::from_rgb(116, 123, 151)),
-            );
+            if show_full_path {
+                ui.add(
+                    egui::Label::new(
+                        RichText::new(path)
+                            .size(10.5)
+                            .color(Color32::from_rgb(116, 123, 151)),
+                    )
+                    .selectable(true),
+                );
+            } else {
+                ui.label(
+                    RichText::new(shorten_path(path, 54))
+                        .size(10.5)
+                        .color(Color32::from_rgb(116, 123, 151)),
+                );
+            }
         });
     ui.add_space(5.0);
 }
 
 fn step_badge(ui: &mut egui::Ui, number: &str, label: &str, done: bool) {
-    let color = if done { PURPLE_LIGHT } else { MUTED };
+    let color = if done { accent_soft() } else { MUTED };
     ui.horizontal(|ui| {
         ui.label(
             RichText::new(format!(" {number} "))
                 .size(13.0)
                 .strong()
                 .color(Color32::WHITE)
-                .background_color(if done { PURPLE } else { PANEL_2 }),
+                .background_color(if done { accent_main() } else { panel_raised() }),
         );
         ui.label(RichText::new(label).size(13.0).color(color));
     });
@@ -1723,8 +2212,8 @@ fn step_badge(ui: &mut egui::Ui, number: &str, label: &str, done: bool) {
 
 fn metadata_chip(ui: &mut egui::Ui, label: &str, value: &str) {
     egui::Frame::new()
-        .fill(PANEL_2)
-        .stroke(Stroke::new(1.0, BORDER))
+        .fill(panel_raised())
+        .stroke(Stroke::new(1.0, border_color()))
         .corner_radius(egui::CornerRadius::same(6))
         .inner_margin(egui::Margin::symmetric(8, 5))
         .show(ui, |ui| {

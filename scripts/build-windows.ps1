@@ -51,7 +51,7 @@ try {
         } finally {
             Pop-Location
         }
-        Write-Host "Installer output: $(Join-Path $root 'dist\Privora-Setup-0.3.0-x64.exe')" -ForegroundColor Green
+        Write-Host "Installer output: $(Join-Path $root 'dist\Privora-Setup-0.4.0-x64.exe')" -ForegroundColor Green
     }
 } finally {
     Pop-Location

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.4.0 — UI and preferences refresh
+
+- Reworked the app shell, navigation, hero panel, page spacing and top bar toward a calmer Apple-inspired utility aesthetic.
+- Added native accent palettes (Violet, Blue, Mint, Rose) and Midnight/OLED Black appearance preferences.
+- Added global interface scale, compact spacing and animation controls.
+- Added confirmation before decryption, post-unlock access-code clearing, remember-folder control, activity-history control and full-path display preference.
+- Added explicit save/reset actions in Settings.
+- Added a safe activity-clear action that preserves local unlock counters.
+- Extended local-state preferences with defaults so existing v0.3 profiles remain readable.
+
 ## 0.3.0 — UX and offline license policy
 
 - Refined navigation, page hierarchy, typography, spacing, empty states, and license search while retaining Privora's dark violet identity.
