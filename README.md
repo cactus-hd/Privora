@@ -1,5 +1,4 @@
 <div align="center">
-
 # PRIVORA
 
 ### Share digital content without giving up control.
